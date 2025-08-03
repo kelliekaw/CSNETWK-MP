@@ -8,7 +8,7 @@ class MessageType:
     POST = "POST"
     DM = "DM"
     PING = "PING"
-    ACK = "ACK" # Basic protocol function, good to keep.
+    ACK = "ACK"
 
 def create_profile_message(user_id, display_name, status, avatar_type=None, avatar_encoding=None, avatar_data=None):
     """Creates a PROFILE message dictionary."""
