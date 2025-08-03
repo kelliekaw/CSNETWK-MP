@@ -111,7 +111,7 @@ def main():
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
     args = parser.parse_args()
 
-    logger = Logger(verbose=args.verbose)
+    
     
     # print_safe(f"LSNP Client Starting for {args.display_name} ({args.user_id})...")
     # Get inputs
@@ -121,6 +121,9 @@ def main():
     status = input("Status: ").strip()
     ip = get_own_ip()
     user_id = f"{username}@{ip}"
+
+    logger = Logger(verbose=args.verbose, user_id=user_id)
+
     network_handler = NetworkHandler()
 
     # Create profile message
