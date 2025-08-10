@@ -152,7 +152,7 @@ def main():
     # Get inputs
     print_safe(f"LSNP Client Starting...")
     username = input("Username: ").strip()
-    display_name = input("Display Name (optional): ").strip() or None
+    display_name = input("Display Name (optional): ").strip() or ""
     status = input("Status: ").strip()
     ip = get_own_ip()
     user_id = f"{username}@{ip}"
