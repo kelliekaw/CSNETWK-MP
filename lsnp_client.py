@@ -13,7 +13,23 @@ online_peers = {}
 message_history = defaultdict(list) # Stores posts and DMs
 followers = set()
 following = set()
-
+revoked_tokens = set()
+expected_scope_map = {
+    protocol.MessageType.POST: "broadcast",
+    protocol.MessageType.LIKE: "broadcast",
+    protocol.MessageType.DM: "chat",
+    protocol.MessageType.FOLLOW: "follow",
+    protocol.MessageType.UNFOLLOW: "follow",
+    protocol.MessageType.FILE_OFFER: "file",
+    protocol.MessageType.FILE_CHUNK: "file",
+    protocol.MessageType.REVOKE: "chat",
+    protocol.MessageType.GROUP_CREATE: "group",
+    protocol.MessageType.GROUP_UPDATE: "group",
+    protocol.MessageType.GROUP_MESSAGE: "group",
+    protocol.MessageType.TICTACTOE_INVITE: "game",
+    protocol.MessageType.TICTACTOE_MOVE: "game",
+    protocol.MessageType.TICTACTOE_RESULT: "game"
+}
 
 shutdown_event = threading.Event() # For exiting
 def broadcast_profile(network_handler, profile_message, logger):
@@ -200,7 +216,22 @@ def main():
             if message.get('USER_ID') == user_id or message.get('FROM') == user_id:
                 continue
 
+            if msg_type == protocol.MessageType.REVOKE:
+                revoked_token = message.get('TOKEN')
+                if revoked_token:
+                    revoked_tokens.add(revoked_token)
+                continue
+
+            token = message.get('TOKEN')
+            sender_id = message.get('USER_ID') or message.get('FROM')
+            expected_scope = expected_scope_map.get(msg_type)
+
+            if expected_scope:
+                if not protocol.validate_token(token, expected_scope, sender_id, revoked_tokens):
+                    continue
             logger.log(message, origin=f"Received from {addr}")
+
+
 
             if msg_type == protocol.MessageType.PING:
                 from_user_id = message.get('USER_ID')
