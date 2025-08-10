@@ -11,6 +11,23 @@ class MessageType:
     ACK = "ACK"
     FOLLOW = "FOLLOW"
     UNFOLLOW = "UNFOLLOW"
+    
+    # Milestone 3 Required Types
+    FILE_OFFER = "FILE_OFFER"
+    FILE_CHUNK = "FILE_CHUNK"
+    FILE_RECEIVED = "FILE_RECEIVED"
+    REVOKE = "REVOKE"
+    
+    # Milestone 4 Required Types
+    TICTACTOE_INVITE = "TICTACTOE_INVITE"
+    TICTACTOE_MOVE = "TICTACTOE_MOVE"
+    TICTACTOE_RESULT = "TICTACTOE_RESULT"
+    LIKE = "LIKE"
+    
+    # Milestone 5 Required Types
+    GROUP_CREATE = "GROUP_CREATE"
+    GROUP_UPDATE = "GROUP_UPDATE"
+    GROUP_MESSAGE = "GROUP_MESSAGE"
 
 def create_profile_message(user_id, display_name, status, avatar_type=None, avatar_encoding=None, avatar_data=None):
     """Creates a PROFILE message dictionary."""
@@ -82,6 +99,56 @@ def create_unfollow_message(from_user_id, to_user_id):
         "TIMESTAMP": int(time.time()),
         "MESSAGE_ID": secrets.token_hex(8),
         "TOKEN": create_token(from_user_id, "follow")
+    }
+
+def create_ack_message(message_id, status):
+    """Creates an ACK message dictionary."""
+    return {
+        "TYPE": MessageType.ACK,
+        "MESSAGE_ID": message_id,
+        "STATUS": status
+    }
+
+def create_file_offer_message(from_user_id, to_user_id, filename, filesize, filetype, fileid, description):
+    """Creates a FILE_OFFER message dictionary."""
+    return {
+        "TYPE": MessageType.FILE_OFFER,
+        "FROM": from_user_id,
+        "TO": to_user_id,
+        "FILENAME": filename,
+        "FILESIZE": filesize,
+        "FILETYPE": filetype,
+        "FILEID": fileid,
+        "DESCRIPTION": description,
+        "TIMESTAMP": int(time.time()),
+        "MESSAGE_ID": secrets.token_hex(8),
+        "TOKEN": create_token(from_user_id, "file")
+    }
+
+def create_file_chunk_message(from_user_id, to_user_id, fileid, chunk_index, total_chunks, chunk_size, data):
+    """Creates a FILE_CHUNK message dictionary."""
+    return {
+        "TYPE": MessageType.FILE_CHUNK,
+        "FROM": from_user_id,
+        "TO": to_user_id,
+        "FILEID": fileid,
+        "CHUNK_INDEX": chunk_index,
+        "TOTAL_CHUNKS": total_chunks,
+        "CHUNK_SIZE": chunk_size,
+        "DATA": data,
+        "MESSAGE_ID": secrets.token_hex(8),
+        "TOKEN": create_token(from_user_id, "file")
+    }
+
+def create_file_received_message(from_user_id, to_user_id, fileid, status):
+    """Creates a FILE_RECEIVED message dictionary."""
+    return {
+        "TYPE": MessageType.FILE_RECEIVED,
+        "FROM": from_user_id,
+        "TO": to_user_id,
+        "FILEID": fileid,
+        "STATUS": status,
+        "TIMESTAMP": int(time.time())
     }
 
 def serialize_message(message_dict):
