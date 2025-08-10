@@ -277,7 +277,7 @@ def display_liked_posts():
                 print_safe(f"{user_id} [{timestamp}]: {content}")
                 break
 
-def handle_user_input(network_handler, user_id, logger, ttt):
+def handle_user_input(network_handler, user_id, logger):
     """Handles commands typed by the user."""
     # print_safe("\nType 'post <message>', 'dm <user_id> <message>', 'peers', 'view <user_id>', or 'exit'.")
     while True:
@@ -469,7 +469,6 @@ def main():
     logger = Logger(verbose=args.verbose, user_id=user_id)
     logger.following = following  
     network_handler = NetworkHandler()
-    ttt = TicTacToe(user_id, network_handler, logger, revoked_tokens=revoked_tokens)
     # Create profile message
     profile_message = protocol.create_profile_message(user_id, display_name, status)
     
@@ -484,7 +483,7 @@ def main():
     time.sleep(0.5)
 
     # Start input handling in a separate thread
-    input_thread = threading.Thread(target=handle_user_input, args=(network_handler, user_id, logger, ttt), daemon=True)
+    input_thread = threading.Thread(target=handle_user_input, args=(network_handler, user_id, logger), daemon=True)
     input_thread.start()
 
     # print_safe("\nListening for messages...")

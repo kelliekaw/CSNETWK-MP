@@ -1,11 +1,9 @@
 class TicTacToe:
-    def __init__(self, player_id, opponent_id):
+    def __init__(self):
         self.board = [str(i) for i in range(9)]
         self.turn_number = 0
         self.player_symbol = None
-        self.player_id = player_id
         self.opponent_symbol = None
-        self.opponent_id = opponent_id
 
     def assign_symbols(self, player_symbol):
         self.player_symbol = player_symbol
