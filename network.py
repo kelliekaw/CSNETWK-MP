@@ -17,7 +17,7 @@ class NetworkHandler:
 
     def receive(self):
         try:
-            data, addr = self.sock.recvfrom(1024) # Buffer size 1024 bytes
+            data, addr = self.sock.recvfrom(32768) # Buffer size 32KB
             return data.decode('utf-8'), addr
         except socket.timeout:
             return None, None

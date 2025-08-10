@@ -1,3 +1,4 @@
+import secrets
 import protocol
 from network import NetworkHandler
 from logger import Logger
@@ -5,7 +6,10 @@ import time
 import argparse
 import threading
 from collections import defaultdict
-import socket   
+import math
+import base64
+import socket
+import os   
 from shared import print_safe 
 
 # --- Data Structures ---
@@ -14,6 +18,12 @@ message_history = defaultdict(list) # Stores posts and DMs
 post_history = defaultdict(list)
 followers = set()
 following = set()
+incoming_files = {}
+pending_file_offers = {}
+sent_file_offers = {}
+retry_counts = {}
+pending_chunks = {}
+
 liked_posts = {}
 issued_tokens = set()
 revoked_tokens = set()
@@ -35,6 +45,51 @@ expected_scope_map = {
 }
 
 shutdown_event = threading.Event() # For exiting
+
+
+
+
+def send_file_offer_with_retry(network_handler, user_id, logger, target_user_id, filepath, filename, filesize, filetype, fileid, description):
+    file_offer_message = protocol.create_file_offer_message(user_id, target_user_id, filename, filesize, filetype, fileid, description)
+    message_id = file_offer_message['MESSAGE_ID']
+    sent_file_offers[message_id] = {
+        'filepath': filepath,
+        'target_user_id': target_user_id,
+        'fileid': fileid,
+        'filesize': filesize
+    }
+    target_ip = target_user_id.split('@')[1]
+    
+    for i in range(3):
+        network_handler.unicast(protocol.serialize_message(file_offer_message), target_ip)
+        logger.log(file_offer_message, origin=f"Sent to {target_ip} (attempt {i+1})")
+        time.sleep(10) # Wait for 10 seconds for an ACK
+        if message_id not in sent_file_offers: # ACK received
+            return
+    
+    if message_id in sent_file_offers:
+        print_safe(f"\n> No response for file offer {message_id}. Giving up.")
+        del sent_file_offers[message_id]
+
+def send_chunk_with_retry(network_handler, user_id, logger, target_user_id, fileid, i, total_chunks, chunk_data):
+    encoded_chunk = base64.b64encode(chunk_data).decode('utf-8')
+    chunk_message = protocol.create_file_chunk_message(user_id, target_user_id, fileid, i, total_chunks, len(encoded_chunk), encoded_chunk)
+    message_id = chunk_message['MESSAGE_ID']
+    pending_chunks[message_id] = chunk_message
+    target_ip = target_user_id.split('@')[1]
+
+    for _ in range(3):
+        network_handler.unicast(protocol.serialize_message(chunk_message), target_ip)
+        logger.log(chunk_message, origin=f"Sent to {target_ip} (chunk {i+1}/{total_chunks})")
+        time.sleep(1) # Wait for 1 second for an ACK
+        if message_id not in pending_chunks: # ACK received
+            return
+
+    if message_id in pending_chunks:
+        print_safe(f"\n> No response for chunk {i+1}. Giving up.")
+        del pending_chunks[message_id]
+
+
 def broadcast_profile(network_handler, profile_message, logger):
     """Periodically broadcasts the user's profile."""
     while not shutdown_event.is_set():
@@ -61,7 +116,8 @@ def print_menu():
     print_safe("[1] Posts") # view, create, like, unlike
     print_safe("[2] DMs") # view, send
     print_safe("[3] Peers") # view, follow, unfollow
-    print_safe("[4] Exit")
+    print_safe("[4] Files")
+    print_safe("[5] Exit")
 
 def posts_menu():
     print_safe("\n--- Posts Menu ---")
@@ -83,6 +139,12 @@ def peers_menu():
     print_safe("[2] Follow")
     print_safe("[3] Unfollow")
     print_safe("[4] Back")
+    
+def files_menu():
+    print_safe("\n--- Files Menu ---")
+    print_safe("[1] Send File")
+    print_safe("[2] Accept File Offer")
+    print_safe("[3] Back")
     
 def display_posts(user_id):
     if post_history[user_id]:
@@ -208,7 +270,8 @@ def handle_user_input(network_handler, user_id, logger):
                             print_safe("--- Online Peers ---")
                             if online_peers:
                                 for peer_id, peer_info in online_peers.items():
-                                    print_safe(f"- {peer_info.get('DISPLAY_NAME', 'Unknown')} ({peer_id})")
+                                    has_avatar = "(has avatar)" if peer_info.get('AVATAR_DATA') else ""
+                                    print_safe(f"- {peer_info.get('DISPLAY_NAME', 'Unknown')} ({peer_id}) {has_avatar}")
                             else:
                                 print_safe("No other peers detected.")
 
@@ -246,6 +309,47 @@ def handle_user_input(network_handler, user_id, logger):
                             print_safe("Invalid choice")
                             continue
                 case "4":
+                    files_menu()
+                    choice = input("> ").strip()
+                    match choice:
+                        case "1":
+                            target_user_id = input("Send to (user_id): ").strip()
+                            if target_user_id not in online_peers:
+                                print_safe(f"Error: Peer '{target_user_id}' not found.")
+                                continue
+                            filepath = input("Filepath: ").strip()
+                            if not os.path.exists(filepath):
+                                print_safe(f"Error: File '{filepath}' not found.")
+                                continue
+                            filename = os.path.basename(filepath)
+                            filesize = os.path.getsize(filepath)
+                            filetype = filename.split('.')[-1]
+                            fileid = secrets.token_hex(8)
+                            description = input("Description: ").strip()
+                            # Send file offer in a new thread to handle retries
+                            offer_thread = threading.Thread(target=send_file_offer_with_retry, args=(network_handler, user_id, logger, target_user_id, filepath, filename, filesize, filetype, fileid, description), daemon=True)
+                            offer_thread.start()
+                        case "2":
+                            fileid = input("Enter the File ID of the offer you want to accept: ").strip()
+                            if fileid in pending_file_offers:
+                                offer = pending_file_offers[fileid]
+                                ack_message = protocol.create_ack_message(offer['message_id'], "ACCEPTED")
+                                target_ip = offer['from'].split('@')[1]
+                                network_handler.unicast(protocol.serialize_message(ack_message), target_ip)
+                                logger.log(ack_message, origin=f"Sent to {target_ip}")
+                                incoming_files[fileid] = {
+                                    'filename': offer['filename'],
+                                    'filesize': offer['filesize'],
+                                    'received_chunks': {},
+                                    'from': offer['from']
+                                }
+                                del pending_file_offers[fileid]
+                            else:
+                                print_safe("Invalid File ID.")
+                        case "3":
+                            break
+                    
+                case "5":
                     print_safe("Exiting...")
                     send_revoke_messages(network_handler, user_id, issued_tokens)
                     shutdown_event.set()
@@ -285,15 +389,32 @@ def main():
     username = input("Username: ").strip()
     display_name = input("Display Name (optional): ").strip() or ""
     status = input("Status: ").strip()
+    avatar_path = input("Avatar path (optional, press Enter to skip): ").strip()
     ip = get_own_ip()
     user_id = f"{username}@{ip}"
+
+    avatar_type = None
+    avatar_encoding = None
+    avatar_data = None
+    if avatar_path and os.path.exists(avatar_path):
+        try:
+            with open(avatar_path, "rb") as f:
+                avatar_data_raw = f.read()
+            if len(avatar_data_raw) < 20000:
+                avatar_data = base64.b64encode(avatar_data_raw).decode('utf-8')
+                avatar_type = f"image/{avatar_path.split('.')[-1]}"
+                avatar_encoding = "base64"
+            else:
+                print_safe("Avatar image is too large (must be under 20KB). Skipping.")
+        except Exception as e:
+            print_safe(f"Error reading avatar file: {e}. Skipping.")
 
     logger = Logger(verbose=args.verbose, user_id=user_id)
     logger.following = following  
     network_handler = NetworkHandler()
 
     # Create profile message
-    profile_message = protocol.create_profile_message(user_id, display_name, status)
+    profile_message = protocol.create_profile_message(user_id, display_name, status, avatar_type, avatar_encoding, avatar_data)
     
     # Start broadcasting in a separate thread
     broadcast_thread = threading.Thread(target=broadcast_profile, args=(network_handler, profile_message, logger), daemon=True)
@@ -353,6 +474,8 @@ def main():
                 if from_user_id and from_user_id not in online_peers:
                     online_peers[from_user_id] = message
                     network_handler.broadcast(protocol.serialize_message(profile_message))
+                else: # Update existing peer
+                    online_peers[from_user_id].update(message)
             
             elif msg_type == protocol.MessageType.POST:
                 from_user_id = message.get('USER_ID')
@@ -375,6 +498,83 @@ def main():
                 if from_user_id in followers:
                     followers.remove(from_user_id)
                     # print_safe(f"\n> {from_user_id} has unfollowed you.")
+
+            elif msg_type == protocol.MessageType.ACK:
+                message_id = message.get('MESSAGE_ID')
+                status = message.get('STATUS')
+                if message_id in sent_file_offers:
+                    if status == 'ACCEPTED':
+                        offer = sent_file_offers[message_id]
+                        filepath = offer['filepath']
+                        target_user_id = offer['target_user_id']
+                        fileid = offer['fileid']
+                        filesize = offer['filesize']
+                        
+                        # Read file and send chunks
+                        chunk_size = 1024 # 1KB chunks
+                        total_chunks = math.ceil(filesize / chunk_size)
+                        with open(filepath, 'rb') as f:
+                            for i in range(total_chunks):
+                                chunk_data = f.read(chunk_size)
+                                send_chunk_with_retry(network_handler, user_id, logger, target_user_id, fileid, i, total_chunks, chunk_data)
+                        del sent_file_offers[message_id]
+                    elif status == 'REJECTED':
+                        print_safe(f"\n> File offer {message_id} was rejected.")
+                        del sent_file_offers[message_id]
+                elif message_id in pending_chunks:
+                    del pending_chunks[message_id]
+
+            elif msg_type == protocol.MessageType.FILE_OFFER:
+                from_user_id = message.get('FROM')
+                fileid = message.get('FILEID')
+                filename = message.get('FILENAME')
+                filesize = int(message.get('FILESIZE'))
+                message_id = message.get('MESSAGE_ID')
+                print_safe(f"\n> User {from_user_id} wants to send you a file: {filename} ({filesize} bytes). File ID: {fileid}")
+                pending_file_offers[fileid] = {
+                    'filename': filename,
+                    'filesize': filesize,
+                    'from': from_user_id,
+                    'message_id': message_id
+                }
+
+            elif msg_type == protocol.MessageType.FILE_CHUNK:
+                fileid = message.get('FILEID')
+                if fileid in incoming_files:
+                    chunk_index = int(message.get('CHUNK_INDEX'))
+                    total_chunks = int(message.get('TOTAL_CHUNKS'))
+                    data = base64.b64decode(message.get('DATA'))
+                    message_id = message.get('MESSAGE_ID')
+                    incoming_files[fileid]['received_chunks'][chunk_index] = data
+
+                    # Send ACK for the chunk
+                    ack_message = protocol.create_ack_message(message_id, "RECEIVED")
+                    target_ip = incoming_files[fileid]['from'].split('@')[1]
+                    network_handler.unicast(protocol.serialize_message(ack_message), target_ip)
+                    logger.log(ack_message, origin=f"Sent to {target_ip}")
+
+                    if len(incoming_files[fileid]['received_chunks']) == total_chunks:
+                        # Reassemble file
+                        filename = incoming_files[fileid]['filename']
+                        with open(filename, 'wb') as f:
+                            for i in range(total_chunks):
+                                f.write(incoming_files[fileid]['received_chunks'][i])
+                        print_safe(f"\n> File '{filename}' received successfully.")
+                        
+                        # Send FILE_RECEIVED message
+                        file_received_message = protocol.create_file_received_message(user_id, incoming_files[fileid]['from'], fileid, "COMPLETE")
+                        target_ip = incoming_files[fileid]['from'].split('@')[1]
+                        network_handler.unicast(protocol.serialize_message(file_received_message), target_ip)
+                        logger.log(file_received_message, origin=f"Sent to {target_ip}")
+
+                        del incoming_files[fileid]
+
+            elif msg_type == protocol.MessageType.FILE_RECEIVED:
+                fileid = message.get('FILEID')
+                status = message.get('STATUS')
+                if status == "COMPLETE":
+                    print_safe(f"\n> File with ID '{fileid}' was successfully received.")
+
 
     except KeyboardInterrupt:
         print_safe("\nShutting down client.")
