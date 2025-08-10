@@ -169,9 +169,9 @@ def main():
     broadcast_thread.start()
 
     # Send initial PING to discover other clients
-    ping_message = protocol.create_ping_message(user_id)
-    network_handler.broadcast(protocol.serialize_message(ping_message))
-    logger.log(ping_message, origin="Sent")
+    # ping_message = protocol.create_ping_message(user_id)
+    # network_handler.broadcast(protocol.serialize_message(ping_message))
+    # logger.log(ping_message, origin="Sent")
 
     # Start broadcasting ping
     discovery_thread = threading.Thread(target=broadcast_ping, args=(network_handler, user_id, logger), daemon=True)
