@@ -109,7 +109,6 @@ def handle_invite(message, network_handler, logger):
     game_id = message["GAMEID"]
     symbol = message["SYMBOL"]
     message_id = message["MESSAGE_ID"]
-    print_safe(f"\n{from_user} invited you to play Tic-Tac-Toe")
     choice = input("Accept? (y/n): ").strip().lower()
     if choice != "y":
         print_safe("Invite declined.")

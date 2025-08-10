@@ -136,7 +136,7 @@ def create_unfollow_message(from_user_id, to_user_id):
         "TOKEN": create_token(from_user_id, "follow")
     }
 
-def create_ack_message(message_id, status):
+def create_ack_message(message_id, status="RECEIVED"):
     return {
         "TYPE": MessageType.ACK,
         "MESSAGE_ID": message_id,
