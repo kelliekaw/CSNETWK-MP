@@ -154,6 +154,71 @@ def create_like_message(from_user_id, to_user_id, post_timestamp, action="LIKE")
         "TOKEN": create_token(from_user_id, "broadcast")
     }
 
+def validate_symbol(symbol):
+    if symbol not in ("X", "O"):
+        raise ValueError("Symbol must be 'X' or 'O'")
+
+def validate_game_id(game_id):
+    if not (game_id.startswith("g") and game_id[1:].isdigit() and 0 <= int(game_id[1:]) <= 255):
+        raise ValueError("GAMEID must be in format g0–g255")
+    
+def create_ttt_invite_message(from_user_id, to_user_id, game_id, symbol):
+    validate_symbol(symbol)
+    validate_game_id(game_id)
+
+    return {
+        "TYPE": MessageType.TICTACTOE_INVITE,
+        "FROM": from_user_id,
+        "TO": to_user_id,
+        "GAMEID": game_id,
+        "MESSAGE_ID": secrets.token_hex(8),
+        "SYMBOL": symbol,
+        "TIMESTAMP": int(time.time()),
+        "TOKEN": create_token(from_user_id, "game")
+    }
+
+def create_ttt_move_message(from_user_id, to_user_id, game_id, position, symbol, turn):
+    validate_symbol(symbol)
+    validate_game_id(game_id)
+    if not (0 <= position <= 8):
+        raise ValueError("Position must be an integer 0–8")
+
+    return {
+        "TYPE": MessageType.TICTACTOE_MOVE,
+        "FROM": from_user_id,
+        "TO": to_user_id,
+        "GAMEID": game_id,
+        "MESSAGE_ID": secrets.token_hex(8),
+        "POSITION": position,
+        "SYMBOL": symbol,
+        "TURN": turn,
+        "TOKEN": create_token(from_user_id, "game")
+    }
+
+def create_ttt_result_message(from_user_id, to_user_id, game_id, result, symbol, winning_line=None):
+    validate_symbol(symbol)
+    validate_game_id(game_id)
+    if result not in ("WIN", "LOSS", "DRAW", "FORFEIT"):
+        raise ValueError("RESULT must be WIN, LOSS, DRAW, or FORFEIT")
+
+    message = {
+        "TYPE": MessageType.TICTACTOE_RESULT,
+        "FROM": from_user_id,
+        "TO": to_user_id,
+        "GAMEID": game_id,
+        "MESSAGE_ID": secrets.token_hex(8),
+        "RESULT": result,
+        "SYMBOL": symbol,
+        "TIMESTAMP": int(time.time())
+    }
+
+    if winning_line is not None:
+        if not all(0 <= i <= 8 for i in winning_line):
+            raise ValueError("WINNING_LINE indices must be between 0 and 8")
+        message["WINNING_LINE"] = ",".join(map(str, winning_line))
+
+    return message
+
 def serialize_message(message_dict):
     """Converts a message dictionary into a string for transmission."""
     lines = [f"{key}:{value}" for key, value in message_dict.items()]

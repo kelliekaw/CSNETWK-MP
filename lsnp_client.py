@@ -7,6 +7,7 @@ import threading
 from collections import defaultdict
 import socket   
 from shared import print_safe 
+from tictactoe import TicTacToe
 
 # --- Data Structures ---
 online_peers = {}
@@ -33,6 +34,11 @@ expected_scope_map = {
     protocol.MessageType.TICTACTOE_MOVE: "game",
     protocol.MessageType.TICTACTOE_RESULT: "game"
 }
+active_games = {}
+active_game_ids = set()
+pending_acks = {}
+ACK_TIMEOUT = 2  # seconds
+MAX_RETRIES = 3
 
 shutdown_event = threading.Event() # For exiting
 def broadcast_profile(network_handler, profile_message, logger):
@@ -56,11 +62,176 @@ def send_revoke_messages(network_handler, user_id, tokens):
         revoke_message = protocol.create_revoke_message(user_id, token)
         network_handler.broadcast(protocol.serialize_message(revoke_message))
 
+def check_pending_acks(network_handler, logger):
+    now = time.time()
+    for msg_id, info in list(pending_acks.items()):
+        if now - info["timestamp"] > ACK_TIMEOUT:
+            if info["retries"] < MAX_RETRIES:
+                print_safe(f"Retrying invite for msg_id={msg_id}...")
+                network_handler.unicast(protocol.serialize_message(info["data"]), info["target_ip"])
+                logger.log(info["data"], origin=f"Retry sent to {info['target_ip']}")
+                info["timestamp"] = now
+                info["retries"] += 1
+            else:
+                print_safe(f"Failed to get ACK for {msg_id} after {MAX_RETRIES} retries.")
+                del pending_acks[msg_id]
+
+def handle_ack(message):
+    msg_id = message.get("MESSAGE_ID")
+    if msg_id in pending_acks:
+        print_safe(f"ACK received for message_id={msg_id}.")
+        ack_info = pending_acks.pop(msg_id) 
+        msg = ack_info["data"]
+        msg_type = msg.get("TYPE")
+        game_id = msg.get("GAMEID")
+        
+        if not game_id:
+            return
+        if game_id not in active_games:
+            print_safe(f"ACK {msg_id} received, but game {game_id} is not active.")
+            return
+        game = active_games[game_id]
+        print_safe(f"ACK received for game {game_id}")
+        handle_move(game_id)
+    else:
+        print_safe(f"Unexpected or duplicate ACK for {msg_id}")
+
+def generate_game_id():
+    for i in range(256):
+        if i not in active_game_ids:
+            active_game_ids.add(i)
+            return i
+    raise RuntimeError("No available game IDs!")
+
+def handle_invite(message, network_handler, logger):
+    from_user = message["FROM"]
+    to_user = message["TO"]
+    game_id = message["GAMEID"]
+    symbol = message["SYMBOL"]
+    message_id = message["MESSAGE_ID"]
+    print_safe(f"\n{from_user} invited you to play Tic-Tac-Toe")
+    choice = input("Accept? (y/n): ").strip().lower()
+    if choice != "y":
+        print_safe("Invite declined.")
+        return
+
+    send_ack(message_id, from_user, network_handler, logger)
+    # Create game and assign symbols
+    game = TicTacToe()
+    game.assign_symbols(symbol, "O")
+    game.player_symbol = "O"
+    game.opponent_symbol = "X"
+    game.player_id = to_user
+    game.opponent_id = from_user
+    active_games[game_id] = game
+
+    print_safe("Game started!")
+    handle_move(game_id, network_handler, logger)
+
+def send_ack(message_id, to_user, network_handler, logger):
+    ack = protocol.create_ack_message(message_id)
+    target_ip = to_user.split('@')[1]
+    network_handler.unicast(protocol.serialize_message(ack), target_ip)
+    logger.log(ack, origin=f"Sent to {target_ip}")
+
+def invite_player(user_id, to_user_id, network_handler, logger):
+    game_id = generate_game_id()
+
+    game = TicTacToe()
+    game.assign_symbols("X")
+    game.player_symbol = "X"
+    game.opponent_symbol = "O"
+    game.player_id = user_id
+    game.opponent_id = to_user_id
+    active_games[game_id] = game
+
+    msg = protocol.create_ttt_invite_message(
+        from_user_id=user_id,
+        to_user_id=to_user_id,
+        game_id=game_id,
+        symbol="X"
+    )
+    message_id = msg.get("MESSAGE_ID")
+    target_ip = to_user_id.split('@')[1]
+    network_handler.unicast(protocol.serialize_message(msg), target_ip)
+    logger.log(msg, origin=f"Sent to {target_ip}")
+
+    pending_acks[message_id] = {
+        "timestamp": time.time(),
+        "retries": 0,
+        "data": msg,
+        "target_ip": target_ip
+    }
+
+def handle_move(game_id, network_handler, logger):
+    game = active_games[game_id]
+    symbol = game.player_symbol
+    turn = game.turn_number
+    print_safe(game.display_board())
+    
+    while True:
+        try:
+            move = int(input("Enter position (0-8)"))
+            if move < 0 or move >= 9:
+                print_safe("Invalid position. Choose 0-8.")
+                continue
+            if not game.make_move(move, game.player_symbol):
+                print_safe("Position already taken. Try again.")
+            break
+        except ValueError:
+            print_safe("Please enter a valid number")
+        
+    print_safe(game.display_board())
+
+    msg = protocol.create_ttt_move_message(
+        from_user_id=game.player_id,
+        to_user_id=game.opponent_id,
+        game_id=game_id,
+        position=move,
+        symbol=symbol,
+        turn=turn
+    )    
+    target_ip = game.opponent_id.split("@")[1]
+    network_handler.unicast(protocol.serialize_message(msg), target_ip)
+    logger.log(msg, origin=f"Sent to {target_ip}")
+    pending_acks[msg["MESSAGE_ID"]] = {
+        "timestamp": time.time(),
+        "retries": 0,
+        "data": msg,
+        "target_ip": target_ip
+    }
+    print_safe(f"Move sent to {game.opponent_id}")
+
+
+
+def play_game(game_id, is_my_turn=False):
+    game = active_games[game_id]
+
+    while True:
+        if is_my_turn:
+            move = int(input("Enter position (0-8): "))
+            if game.make_move(move, game.player_symbol):
+                print_safe(game.display_board())
+                is_my_turn = False
+            else:
+                print_safe("Invalid move. Try again.")
+        else:
+            print_safe("Waiting for opponent's move...")
+            # Here you’d wait for a MOVE message from opponent
+            is_my_turn = True
+
+        winner = game.check_winner()
+        if winner:
+            print_safe(f"Game Over! Winner: {winner}")
+            break
+
+
 def print_menu():
     print_safe("\n--- LSNP Client Menu ---")
     print_safe("[1] Posts") # view, create, like, unlike
     print_safe("[2] DMs") # view, send
     print_safe("[3] Peers") # view, follow, unfollow
+    print_safe("[4] Play TicTacToe")
     print_safe("[4] Exit")
 
 def posts_menu():
@@ -106,7 +277,7 @@ def display_liked_posts():
                 print_safe(f"{user_id} [{timestamp}]: {content}")
                 break
 
-def handle_user_input(network_handler, user_id, logger):
+def handle_user_input(network_handler, user_id, logger, ttt):
     """Handles commands typed by the user."""
     # print_safe("\nType 'post <message>', 'dm <user_id> <message>', 'peers', 'view <user_id>', or 'exit'.")
     while True:
@@ -246,6 +417,13 @@ def handle_user_input(network_handler, user_id, logger):
                             print_safe("Invalid choice")
                             continue
                 case "4":
+                    target_user_id = input("Invite (user_id) to play tic-tac-toe: ").strip()
+                    if target_user_id not in online_peers:
+                        print_safe(f"Error: Peer '{target_user_id}' not found.")
+                        continue
+
+                    invite_player(user_id, target_user_id, network_handler, logger)
+                case "5":
                     print_safe("Exiting...")
                     send_revoke_messages(network_handler, user_id, issued_tokens)
                     shutdown_event.set()
@@ -291,7 +469,7 @@ def main():
     logger = Logger(verbose=args.verbose, user_id=user_id)
     logger.following = following  
     network_handler = NetworkHandler()
-
+    ttt = TicTacToe(user_id, network_handler, logger, revoked_tokens=revoked_tokens)
     # Create profile message
     profile_message = protocol.create_profile_message(user_id, display_name, status)
     
@@ -306,7 +484,7 @@ def main():
     time.sleep(0.5)
 
     # Start input handling in a separate thread
-    input_thread = threading.Thread(target=handle_user_input, args=(network_handler, user_id, logger), daemon=True)
+    input_thread = threading.Thread(target=handle_user_input, args=(network_handler, user_id, logger, ttt), daemon=True)
     input_thread.start()
 
     # print_safe("\nListening for messages...")
@@ -375,6 +553,19 @@ def main():
                 if from_user_id in followers:
                     followers.remove(from_user_id)
                     # print_safe(f"\n> {from_user_id} has unfollowed you.")
+
+            elif msg_type == protocol.MessageType.TICTACTOE_INVITE:
+                handle_invite(message, network_handler, logger)
+            elif msg_type == protocol.MessageType.TICTACTOE_MOVE:
+                handle_move(message, network_handler, logger)
+            elif msg_type == protocol.MessageType.TICTACTOE_RESULT:
+                print_safe(f"Game over. Result: {message['RESULT']}")
+                if message["GAMEID"] in active_games:
+                    del active_games[message["GAMEID"]]
+            elif msg_type == protocol.MessageType.ACK:
+                handle_ack(message, network_handler, logger)
+
+
 
     except KeyboardInterrupt:
         print_safe("\nShutting down client.")

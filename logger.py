@@ -70,5 +70,12 @@ class Logger:
             else:
                 name = self._get_display_name(from_id)
                 print_safe(f"\n> User {name} has unfollowed you.")
-
+        elif msg_type == protocol.MessageType.TICTACTOE_INVITE:
+            if message.get('FROM') == self.user_id:
+                name = self._get_display_name(to_id)
+                print_safe(f"\n> Sent invite to {name}")
+            else:
+                name = self._get_display_name(from_id)
+                print_safe(f"\n> {name} is inviting you to play tic-tac-toe")
+            
         # PING, ACK, and other automatic messages are not printed in non-verbose mode
