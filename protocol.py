@@ -3,7 +3,7 @@ import time
 import secrets
 
 class MessageType:
-    # Milestone 1 Required Types
+    # Milestone 2 Required Types
     PROFILE = "PROFILE"
     POST = "POST"
     DM = "DM"
@@ -17,7 +17,7 @@ def create_profile_message(user_id, display_name, status, avatar_type=None, avat
     message = {
         "TYPE": MessageType.PROFILE,
         "USER_ID": user_id,
-        "DISPLAY_NAME": display_name,
+        "DISPLAY_NAME": display_name if display_name else "",
         "STATUS": status
     }
     if avatar_type and avatar_encoding and avatar_data:

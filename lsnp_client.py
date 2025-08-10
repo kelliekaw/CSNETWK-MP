@@ -24,6 +24,15 @@ def broadcast_profile(network_handler, profile_message, logger):
         logger.log(profile_message, origin="Broadcast")
         time.sleep(300) # Broadcast every 5 minutes as per spec
 
+# Broadcast ping every 5 minutes
+def broadcast_ping(network_handler, user_id, logger):
+    while not shutdown_event.is_set():
+        ping_message = protocol.create_ping_message(user_id)
+        network_handler.broadcast(protocol.serialize_message(ping_message))
+        logger.log(ping_message, origin="Broadcast")
+        time.sleep(300)
+
+
 def print_menu():
     print_safe("\n--- LSNP Client Menu ---")
     print_safe("[1] Post")
@@ -143,7 +152,7 @@ def main():
     # Get inputs
     print_safe(f"LSNP Client Starting...")
     username = input("Username: ").strip()
-    display_name = input("Display Name (optional): ").strip() or None
+    display_name = input("Display Name (optional): ").strip() or ""
     status = input("Status: ").strip()
     ip = get_own_ip()
     user_id = f"{username}@{ip}"
@@ -159,10 +168,14 @@ def main():
     broadcast_thread = threading.Thread(target=broadcast_profile, args=(network_handler, profile_message, logger), daemon=True)
     broadcast_thread.start()
 
-    # Send a PING to discover other clients
+    # Send initial PING to discover other clients
     ping_message = protocol.create_ping_message(user_id)
     network_handler.broadcast(protocol.serialize_message(ping_message))
     logger.log(ping_message, origin="Sent")
+
+    # Start broadcasting ping
+    discovery_thread = threading.Thread(target=broadcast_ping, args=(network_handler, user_id, logger), daemon=True)
+    discovery_thread.start()
 
     time.sleep(0.5)
 
@@ -190,12 +203,17 @@ def main():
             logger.log(message, origin=f"Received from {addr}")
 
             if msg_type == protocol.MessageType.PING:
-                network_handler.broadcast(protocol.serialize_message(profile_message))
+                from_user_id = message.get('USER_ID')
+                if from_user_id and from_user_id not in online_peers:
+                    online_peers[from_user_id] = message
+                    network_handler.broadcast(protocol.serialize_message(profile_message))
+
             
             elif msg_type == protocol.MessageType.PROFILE:
                 from_user_id = message.get('USER_ID')
                 if from_user_id and from_user_id not in online_peers:
                     online_peers[from_user_id] = message
+                    network_handler.broadcast(protocol.serialize_message(profile_message))
             
             elif msg_type == protocol.MessageType.POST:
                 from_user_id = message.get('USER_ID')

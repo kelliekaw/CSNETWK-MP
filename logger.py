@@ -37,6 +37,8 @@ class Logger:
 
     def _log_non_verbose(self, message):
         msg_type = message.get("TYPE")
+        from_id = message.get('FROM')
+        to_id = message.get('TO')
         if msg_type == protocol.MessageType.PROFILE:
             display_name = message.get('DISPLAY_NAME') or message.get('USER_ID', 'Unknown')
             print_safe(f"\n> {display_name}: {message.get('STATUS', '')}")
@@ -46,8 +48,6 @@ class Logger:
             if from_user_id in self.following or message.get('origin') == "Sent":  # Add following as parameter
                 print_safe(f"\n> Post from {message.get('USER_ID')}: {message.get('CONTENT')}")
         elif msg_type == protocol.MessageType.DM:
-            from_id = message.get('FROM')
-            to_id = message.get('TO')
             is_outgoing = from_id == self.user_id
             if is_outgoing:
                 name = self._get_display_name(to_id)
@@ -57,7 +57,17 @@ class Logger:
                 direction = f"FROM {name}"
             print_safe(f"\n> [DM {direction}]: {message.get('CONTENT')}")
         elif msg_type == protocol.MessageType.FOLLOW:
-            print_safe(f"\n> User {message.get('FROM')} has followed you.")
+            if message.get('FROM') == self.user_id:
+                name = self._get_display_name(to_id)
+                print_safe(f"\n> Started following User {name}.")
+            else:
+                name = self._get_display_name(from_id)
+                print_safe(f"\n> User {name} has followed you.")
         elif msg_type == protocol.MessageType.UNFOLLOW:
-            print_safe(f"\n> User {message.get('FROM')} has unfollowed you.")
+            if message.get('FROM') == self.user_id:
+                name = self._get_display_name(to_id)
+                print_safe(f"\n> User {name} has been unfollowed.")
+            else:
+                name = self._get_display_name(from_id)
+                print_safe(f"\n> User {name} has unfollowed you.")
         # PING, ACK, and other automatic messages are not printed in non-verbose mode
