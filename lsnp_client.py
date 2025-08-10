@@ -11,6 +11,8 @@ from shared import print_safe
 # --- Data Structures ---
 online_peers = {}
 message_history = defaultdict(list) # Stores posts and DMs
+followers = set()
+following = set()
 
 
 shutdown_event = threading.Event() # For exiting
@@ -28,7 +30,9 @@ def print_menu():
     print_safe("[2] DM")
     print_safe("[3] Show Peers")
     print_safe("[4] View Messages by Peer")
-    print_safe("[5] Exit")
+    print_safe("[5] Follow")
+    print_safe("[6] Unfollow")
+    print_safe("[7] Exit")
 
 def handle_user_input(network_handler, user_id, logger):
     """Handles commands typed by the user."""
@@ -82,6 +86,28 @@ def handle_user_input(network_handler, user_id, logger):
                         print_safe(f"No messages found for {target_user_id}.")
 
                 case "5":
+                    target_user_id = input("Follow user (user_id): ").strip()
+                    if target_user_id not in online_peers:
+                        print_safe(f"Error: Peer '{target_user_id}' not found.")
+                        continue
+                    follow_message = protocol.create_follow_message(user_id, target_user_id)
+                    target_ip = target_user_id.split('@')[1]
+                    network_handler.unicast(protocol.serialize_message(follow_message), target_ip)
+                    logger.log(follow_message, origin=f"Sent to {target_ip}")
+                    following.add(target_user_id)
+
+                case "6":
+                    target_user_id = input("Unfollow user (user_id): ").strip()
+                    if target_user_id not in following:
+                        print_safe(f"Error: You are not following '{target_user_id}'.")
+                        continue
+                    unfollow_message = protocol.create_unfollow_message(user_id, target_user_id)
+                    target_ip = target_user_id.split('@')[1]
+                    network_handler.unicast(protocol.serialize_message(unfollow_message), target_ip)
+                    logger.log(unfollow_message, origin=f"Sent to {target_ip}")
+                    following.remove(target_user_id)
+
+                case "7":
                     print_safe("Exiting...")
                     shutdown_event.set()
                     break
@@ -123,7 +149,7 @@ def main():
     user_id = f"{username}@{ip}"
 
     logger = Logger(verbose=args.verbose, user_id=user_id)
-
+    logger.following = following  
     network_handler = NetworkHandler()
 
     # Create profile message
@@ -173,13 +199,25 @@ def main():
             
             elif msg_type == protocol.MessageType.POST:
                 from_user_id = message.get('USER_ID')
-                message_history[from_user_id].append(message)
+                if from_user_id in following:
+                    message_history[from_user_id].append(message)
 
             elif msg_type == protocol.MessageType.DM:
                 from_user_id = message.get('FROM')
                 to_user_id = message.get('TO')
                 if to_user_id == user_id:
                     message_history[from_user_id].append(message)
+            
+            elif msg_type == protocol.MessageType.FOLLOW:
+                from_user_id = message.get('FROM')
+                followers.add(from_user_id)
+                # print_safe(f"\n> {from_user_id} has followed you.")
+
+            elif msg_type == protocol.MessageType.UNFOLLOW:
+                from_user_id = message.get('FROM')
+                if from_user_id in followers:
+                    followers.remove(from_user_id)
+                    # print_safe(f"\n> {from_user_id} has unfollowed you.")
 
     except KeyboardInterrupt:
         print_safe("\nShutting down client.")
