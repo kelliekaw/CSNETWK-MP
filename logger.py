@@ -2,10 +2,18 @@ import protocol
 from shared import print_safe
         
 class Logger:
-    def __init__(self, verbose=False, user_id=None):
+    def __init__(self, verbose=False, user_id=None, online_peers=None):
         self.verbose = verbose
         self.user_id = user_id
+        self.online_peers = online_peers if online_peers is not None else {}
 
+    def _get_display_name(self, user_id):
+        # Return display name if known, else user_id (for non verbose printing)
+        peer_info = self.online_peers.get(user_id)
+        if peer_info:
+            return peer_info.get('DISPLAY_NAME') or user_id
+        return user_id
+    
     def log(self, message, origin=None):
         if self.verbose:
             self._log_verbose(message, origin)
@@ -30,14 +38,21 @@ class Logger:
     def _log_non_verbose(self, message):
         msg_type = message.get("TYPE")
         if msg_type == protocol.MessageType.PROFILE:
-            print_safe(f"\n> {message.get('DISPLAY_NAME', 'Unknown')}: {message.get('STATUS', '')}")
+            display_name = message.get('DISPLAY_NAME') or message.get('USER_ID', 'Unknown')
+            print_safe(f"\n> {display_name}: {message.get('STATUS', '')}")
         elif msg_type == protocol.MessageType.POST:
-            # This will be improved later to show the display name
-            print_safe(f"\n> Post from {message.get('USER_ID')}: {message.get('CONTENT')}")
+            user_id = message.get('USER_ID')
+            display_name = self._get_display_name(user_id)
+            print_safe(f"\n> Post from {display_name}: {message.get('CONTENT')}")
         elif msg_type == protocol.MessageType.DM:
             from_id = message.get('FROM')
             to_id = message.get('TO')
             is_outgoing = from_id == self.user_id
-            direction = f"To {to_id}" if is_outgoing else f"From {from_id}"
+            if is_outgoing:
+                name = self._get_display_name(to_id)
+                direction = f"TO {name}"
+            else:
+                name = self._get_display_name(from_id)
+                direction = f"FROM {name}"
             print_safe(f"\n> [DM {direction}]: {message.get('CONTENT')}")
         # PING, ACK, and other automatic messages are not printed in non-verbose mode
