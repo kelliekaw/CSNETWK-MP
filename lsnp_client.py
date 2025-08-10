@@ -561,7 +561,7 @@ def main():
                 if message["GAMEID"] in active_games:
                     del active_games[message["GAMEID"]]
             elif msg_type == protocol.MessageType.ACK:
-                handle_ack(message, network_handler, logger)
+                handle_ack(message)
 
 
 
