@@ -13,6 +13,7 @@ online_peers = {}
 message_history = defaultdict(list) # Stores posts and DMs
 followers = set()
 following = set()
+issued_tokens = set()
 revoked_tokens = set()
 expected_scope_map = {
     protocol.MessageType.POST: "broadcast",
@@ -48,6 +49,10 @@ def broadcast_ping(network_handler, user_id, logger):
         logger.log(ping_message, origin="Broadcast")
         time.sleep(300)
 
+def send_revoke_messages(network_handler, user_id, tokens):
+    for token in tokens:
+        revoke_message = protocol.create_revoke_message(user_id, token)
+        network_handler.broadcast(protocol.serialize_message(revoke_message))
 
 def print_menu():
     print_safe("\n--- LSNP Client Menu ---")
@@ -74,6 +79,7 @@ def handle_user_input(network_handler, user_id, logger):
                 case "1":
                     content = input("Enter your post: ")
                     post_message = protocol.create_post_message(user_id, content)
+                    issued_tokens.add(post_message["TOKEN"])
                     network_handler.broadcast(protocol.serialize_message(post_message))
                     logger.log(post_message, origin="Sent")
 
@@ -84,6 +90,7 @@ def handle_user_input(network_handler, user_id, logger):
                         continue
                     content = input("Message: ").strip()
                     dm_message = protocol.create_dm_message(user_id, target_user_id, content)
+                    issued_tokens.add(dm_message["TOKEN"])
                     target_ip = target_user_id.split('@')[1]
                     network_handler.unicast(protocol.serialize_message(dm_message), target_ip)
                     logger.log(dm_message, origin=f"Sent to {target_ip}")
@@ -116,6 +123,7 @@ def handle_user_input(network_handler, user_id, logger):
                         print_safe(f"Error: Peer '{target_user_id}' not found.")
                         continue
                     follow_message = protocol.create_follow_message(user_id, target_user_id)
+                    issued_tokens.add(follow_message["TOKEN"])
                     target_ip = target_user_id.split('@')[1]
                     network_handler.unicast(protocol.serialize_message(follow_message), target_ip)
                     logger.log(follow_message, origin=f"Sent to {target_ip}")
@@ -127,6 +135,7 @@ def handle_user_input(network_handler, user_id, logger):
                         print_safe(f"Error: You are not following '{target_user_id}'.")
                         continue
                     unfollow_message = protocol.create_unfollow_message(user_id, target_user_id)
+                    issued_tokens.add(unfollow_message["TOKEN"])
                     target_ip = target_user_id.split('@')[1]
                     network_handler.unicast(protocol.serialize_message(unfollow_message), target_ip)
                     logger.log(unfollow_message, origin=f"Sent to {target_ip}")
@@ -134,6 +143,7 @@ def handle_user_input(network_handler, user_id, logger):
 
                 case "7":
                     print_safe("Exiting...")
+                    send_revoke_messages(network_handler, user_id, issued_tokens)
                     shutdown_event.set()
                     break
                 case _:

@@ -23,7 +23,7 @@ class MessageType:
     GROUP_CREATE = "GROUP_CREATE"
     GROUP_UPDATE = "GROUP_UPDATE"
     GROUP_MESSAGE = "GROUP_MESSAGE"
-    
+
 
 def create_profile_message(user_id, display_name, status, avatar_type=None, avatar_encoding=None, avatar_data=None):
     """Creates a PROFILE message dictionary."""
@@ -83,6 +83,12 @@ def validate_token(token, expected_scope, sender_user_id=None, revoked_tokens=No
         return False
     
     return True
+
+def create_revoke_message(user_id, token):
+    return {
+        "TYPE": MessageType.REVOKE,
+        "TOKEN": token
+    }
 
 def create_post_message(user_id, content, ttl=3600):
     """Creates a POST message dictionary."""
