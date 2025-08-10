@@ -23,10 +23,11 @@ pending_file_offers = {}
 sent_file_offers = {}
 retry_counts = {}
 pending_chunks = {}
-
+groups = {}
 liked_posts = {}
 issued_tokens = set()
 revoked_tokens = set()
+show_only_group_messages = False
 expected_scope_map = {
     protocol.MessageType.POST: "broadcast",
     protocol.MessageType.LIKE: "broadcast",
@@ -117,7 +118,8 @@ def print_menu():
     print_safe("[2] DMs") # view, send
     print_safe("[3] Peers") # view, follow, unfollow
     print_safe("[4] Files")
-    print_safe("[5] Exit")
+    print_safe("[5] Groups")
+    print_safe("[6] Exit")
 
 def posts_menu():
     print_safe("\n--- Posts Menu ---")
@@ -145,6 +147,15 @@ def files_menu():
     print_safe("[1] Send File")
     print_safe("[2] Accept File Offer")
     print_safe("[3] Back")
+
+def groups_menu():
+    print_safe("\n--- Groups Menu ---")
+    print_safe("[1] Create Group")
+    print_safe("[2] View Groups")
+    print_safe("[3] Update Group")
+    print_safe("[4] Message Group")
+    print_safe("[5] Toggle Group Messages Only")
+
     
 def display_posts(user_id):
     if post_history[user_id]:
@@ -167,6 +178,19 @@ def display_liked_posts():
                 content = post.get("CONTENT")
                 print_safe(f"{user_id} [{timestamp}]: {content}")
                 break
+
+def display_groups():
+    if not groups:
+        print_safe("No groups yet.")
+        return
+    print_safe("--- Groups ---")
+    for group_id, group_info in groups.items():
+        name = group_info.get("GROUP_NAME", "Unnamed Group")
+        members = group_info.get("MEMBERS", "")
+        print_safe(f"Group ID: {group_id}")
+        print_safe(f"Name: {name}")
+        print_safe(f"Members: {members}")
+        print_safe("-" * 14)
 
 def handle_user_input(network_handler, user_id, logger):
     """Handles commands typed by the user."""
@@ -348,8 +372,104 @@ def handle_user_input(network_handler, user_id, logger):
                                 print_safe("Invalid File ID.")
                         case "3":
                             break
-                    
+                
                 case "5":
+                    groups_menu()
+                    choice = input("> ").strip()
+                    match choice:
+                        case "1":
+                            group_name = input("Enter group name: ").strip()
+                            members = set()
+                            print_safe("Enter members' user IDs one by one. Type 'done' when finished.")
+                            while True:
+                                member = input("Member user_id: ").strip()
+                                if member.lower() == 'done':
+                                    break
+                                if member == user_id:
+                                    print_safe("You are automatically included as a member.")
+                                    continue
+                                if member in online_peers:
+                                    members.add(member)
+                                else:
+                                    print_safe(f"User '{member}' not found in online peers. Please try again.")
+                            # Make sure creator is included
+                            members.add(user_id)
+
+                            group_create_msg = protocol.create_group_create(user_id, group_name, members=list(members))
+                            target_ips = [m.split('@')[1] for m in members]
+                            for ip in target_ips:
+                                network_handler.unicast(protocol.serialize_message(group_create_msg), ip)
+                            
+                            logger.log(group_create_msg)
+                            groups[group_create_msg["GROUP_ID"]] = group_create_msg
+
+
+                        case "2":
+                            display_groups()
+
+                        case "3":
+                            group_id = input("Enter group id to update: ").strip()
+                            if group_id not in groups:
+                                print_safe("Group not found.")
+                                continue
+                            group_info = groups[group_id]
+                            if user_id != group_info.get('FROM'):
+                                print_safe("You do not have permission to update this group.")
+                                continue
+                            members_str = group_info.get('MEMBERS', '')
+                            print_safe(f"Current members: {members_str}")
+
+                            add_members = input("Enter members to add (comma-separated), or leave blank: ").strip()
+                            remove_members = input("Enter members to remove (comma-separated), or leave blank: ").strip()
+
+                            to_add = set()
+                            to_remove = set()
+
+                            current_members = set(m.strip() for m in members_str.split(",") if m.strip())
+
+                            if add_members:
+                                to_add = set(m.strip() for m in add_members.split(",") if m.strip())
+                                current_members.update(to_add)
+
+                            if remove_members:
+                                to_remove = set(m.strip() for m in remove_members.split(",") if m.strip())
+                                current_members.difference_update(to_remove)
+
+                            # Save updated members list back
+                            group_info["MEMBERS"] = ",".join(sorted(current_members))
+
+                            group_update_msg = protocol.create_group_update(user_id, group_id, to_add, to_remove)
+                            notify = current_members.union(to_remove)
+                            target_ips = [m.split('@')[1] for m in notify]
+                            for ip in target_ips:
+                                network_handler.unicast(protocol.serialize_message(group_update_msg), ip)
+                            
+                            logger.log(group_update_msg)
+
+                        case "4":
+                            group_id = input("Enter group id to message: ").strip()
+                            if group_id not in groups:
+                                print_safe("Group not found.")
+                                continue
+                            group_info = groups[group_id]
+                            content = input("Enter message: ").strip()
+                            members_str = group_info.get("MEMBERS", "")
+                            members = [m.strip() for m in members_str.split(",") if m.strip()]
+
+                            msg = protocol.create_group_message(user_id, group_id, content)
+                            target_ips = [m.split('@')[1] for m in members]
+                            for ip in target_ips:
+                                network_handler.unicast(protocol.serialize_message(msg), ip)
+
+                            logger.log(msg)
+
+                        case "5":
+                            logger.show_only_group_messages = not logger.show_only_group_messages
+                            status = "ON" if logger.show_only_group_messages else "OFF"
+                            print_safe(f"Group Messages Only mode is now {status}")
+                            continue
+
+                case "6":
                     print_safe("Exiting...")
                     send_revoke_messages(network_handler, user_id, issued_tokens)
                     shutdown_event.set()
@@ -409,7 +529,7 @@ def main():
         except Exception as e:
             print_safe(f"Error reading avatar file: {e}. Skipping.")
 
-    logger = Logger(verbose=args.verbose, user_id=user_id)
+    logger = Logger(verbose=args.verbose, user_id=user_id, online_peers=online_peers, groups=groups)
     logger.following = following  
     network_handler = NetworkHandler()
 
@@ -574,6 +694,28 @@ def main():
                 status = message.get('STATUS')
                 if status == "COMPLETE":
                     print_safe(f"\n> File with ID '{fileid}' was successfully received.")
+
+            elif msg_type == protocol.MessageType.GROUP_CREATE:
+                group_id = message.get("GROUP_ID")
+                if group_id:
+                    groups[group_id] = message
+                else:
+                    print_safe("Received GROUP_CREATE message with no GROUP_ID")
+            
+            elif msg_type == protocol.MessageType.GROUP_UPDATE:
+                group_id = message.get("GROUP_ID")
+                if group_id:
+                    group_name = groups.get(group_id, {}).get("GROUP_NAME", "Unknown Group")
+                    remove_list = message.get("REMOVE", "")
+                    remove_members = set(m.strip() for m in remove_list.split(",") if m.strip())
+                    if user_id in remove_members:
+                        if group_id in groups:
+                            del groups[group_id]
+                            print_safe(f"You were removed from group \"{group_name}\"")
+                    groups[group_id] = message
+                else:
+                    print_safe("Received GROUP_UPDATE message with no GROUP_ID")
+
 
 
     except KeyboardInterrupt:

@@ -202,6 +202,40 @@ def create_like_message(from_user_id, to_user_id, post_timestamp, action="LIKE")
         "TOKEN": create_token(from_user_id, "broadcast")
     }
 
+def create_group_create(from_user, group_name, members):
+    ts = int(time.time())
+    return {
+        "TYPE": MessageType.GROUP_CREATE,
+        "FROM": from_user,
+        "GROUP_ID": f"{group_name.replace(' ', '').lower()}{ts}",
+        "GROUP_NAME": group_name,
+        "MEMBERS": ",".join(members),
+        "TIMESTAMP": ts,
+        "TOKEN": create_token(from_user, "group")
+    }
+
+def create_group_update(from_user, group_id, add=None, remove=None):
+    msg = {
+        "TYPE": "GROUP_UPDATE",
+        "FROM": from_user,
+        "GROUP_ID": group_id,
+        "TIMESTAMP": int(time.time()),
+        "TOKEN": create_token(from_user, "group")
+    }
+    if add: msg["ADD"] = ",".join(add)
+    if remove: msg["REMOVE"] = ",".join(remove)
+    return msg
+
+def create_group_message(from_user, group_id, content):
+    return {
+        "TYPE": "GROUP_MESSAGE",
+        "FROM": from_user,
+        "GROUP_ID": group_id,
+        "CONTENT": content,
+        "TIMESTAMP": int(time.time()),
+        "TOKEN": create_token(from_user, "group")
+    }
+
 def serialize_message(message_dict):
     """Converts a message dictionary into a string for transmission."""
     lines = [f"{key}:{value}" for key, value in message_dict.items()]
