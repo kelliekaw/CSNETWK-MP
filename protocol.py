@@ -143,6 +143,17 @@ def create_ack_message(message_id, status):
         "STATUS": status
     }
 
+def create_like_message(from_user_id, to_user_id, post_timestamp, action="LIKE"):
+    return {
+        "TYPE": MessageType.LIKE,
+        "FROM": from_user_id,
+        "TO": to_user_id,
+        "POST_TIMESTAMP": post_timestamp,
+        "ACTION": action,
+        "TIMESTAMP": int(time.time()),
+        "TOKEN": create_token(from_user_id, "broadcast")
+    }
+
 def serialize_message(message_dict):
     """Converts a message dictionary into a string for transmission."""
     lines = [f"{key}:{value}" for key, value in message_dict.items()]
