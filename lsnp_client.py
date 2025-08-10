@@ -43,7 +43,7 @@ def send_file_offer_with_retry(network_handler, user_id, logger, target_user_id,
     for i in range(3):
         network_handler.unicast(protocol.serialize_message(file_offer_message), target_ip)
         logger.log(file_offer_message, origin=f"Sent to {target_ip} (attempt {i+1})")
-        time.sleep(2) # Wait for 2 seconds for an ACK
+        time.sleep(10) # Wait for 10 seconds for an ACK
         if message_id not in sent_file_offers: # ACK received
             return
     
