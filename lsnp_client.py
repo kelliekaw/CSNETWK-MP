@@ -133,7 +133,8 @@ def handle_user_input(network_handler, user_id, logger):
                     print_safe("--- Online Peers ---")
                     if online_peers:
                         for peer_id, peer_info in online_peers.items():
-                            print_safe(f"- {peer_info.get('DISPLAY_NAME', 'Unknown')} ({peer_id})")
+                            has_avatar = "(has avatar)" if peer_info.get('AVATAR_DATA') else ""
+                            print_safe(f"- {peer_info.get('DISPLAY_NAME', 'Unknown')} ({peer_id}) {has_avatar}")
                     else:
                         print_safe("No other peers detected.")
 
@@ -246,15 +247,32 @@ def main():
     username = input("Username: ").strip()
     display_name = input("Display Name (optional): ").strip() or ""
     status = input("Status: ").strip()
+    avatar_path = input("Avatar path (optional, press Enter to skip): ").strip()
     ip = get_own_ip()
     user_id = f"{username}@{ip}"
+
+    avatar_type = None
+    avatar_encoding = None
+    avatar_data = None
+    if avatar_path and os.path.exists(avatar_path):
+        try:
+            with open(avatar_path, "rb") as f:
+                avatar_data_raw = f.read()
+            if len(avatar_data_raw) < 20000:
+                avatar_data = base64.b64encode(avatar_data_raw).decode('utf-8')
+                avatar_type = f"image/{avatar_path.split('.')[-1]}"
+                avatar_encoding = "base64"
+            else:
+                print_safe("Avatar image is too large (must be under 20KB). Skipping.")
+        except Exception as e:
+            print_safe(f"Error reading avatar file: {e}. Skipping.")
 
     logger = Logger(verbose=args.verbose, user_id=user_id)
     logger.following = following  
     network_handler = NetworkHandler()
 
     # Create profile message
-    profile_message = protocol.create_profile_message(user_id, display_name, status)
+    profile_message = protocol.create_profile_message(user_id, display_name, status, avatar_type, avatar_encoding, avatar_data)
     
     # Start broadcasting in a separate thread
     broadcast_thread = threading.Thread(target=broadcast_profile, args=(network_handler, profile_message, logger), daemon=True)
@@ -306,6 +324,8 @@ def main():
                 if from_user_id and from_user_id not in online_peers:
                     online_peers[from_user_id] = message
                     network_handler.broadcast(protocol.serialize_message(profile_message))
+                else: # Update existing peer
+                    online_peers[from_user_id].update(message)
             
             elif msg_type == protocol.MessageType.POST:
                 from_user_id = message.get('USER_ID')
