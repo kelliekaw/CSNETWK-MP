@@ -70,4 +70,5 @@ class Logger:
             else:
                 name = self._get_display_name(from_id)
                 print_safe(f"\n> User {name} has unfollowed you.")
+
         # PING, ACK, and other automatic messages are not printed in non-verbose mode

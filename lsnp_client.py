@@ -15,6 +15,7 @@ from shared import print_safe
 # --- Data Structures ---
 online_peers = {}
 message_history = defaultdict(list) # Stores posts and DMs
+post_history = defaultdict(list)
 followers = set()
 following = set()
 incoming_files = {}
@@ -23,6 +24,25 @@ sent_file_offers = {}
 retry_counts = {}
 pending_chunks = {}
 
+liked_posts = {}
+issued_tokens = set()
+revoked_tokens = set()
+expected_scope_map = {
+    protocol.MessageType.POST: "broadcast",
+    protocol.MessageType.LIKE: "broadcast",
+    protocol.MessageType.DM: "chat",
+    protocol.MessageType.FOLLOW: "follow",
+    protocol.MessageType.UNFOLLOW: "follow",
+    protocol.MessageType.FILE_OFFER: "file",
+    protocol.MessageType.FILE_CHUNK: "file",
+    protocol.MessageType.REVOKE: "chat",
+    protocol.MessageType.GROUP_CREATE: "group",
+    protocol.MessageType.GROUP_UPDATE: "group",
+    protocol.MessageType.GROUP_MESSAGE: "group",
+    protocol.MessageType.TICTACTOE_INVITE: "game",
+    protocol.MessageType.TICTACTOE_MOVE: "game",
+    protocol.MessageType.TICTACTOE_RESULT: "game"
+}
 
 shutdown_event = threading.Event() # For exiting
 
@@ -86,18 +106,67 @@ def broadcast_ping(network_handler, user_id, logger):
         logger.log(ping_message, origin="Broadcast")
         time.sleep(300)
 
+def send_revoke_messages(network_handler, user_id, tokens):
+    for token in tokens:
+        revoke_message = protocol.create_revoke_message(user_id, token)
+        network_handler.broadcast(protocol.serialize_message(revoke_message))
 
 def print_menu():
     print_safe("\n--- LSNP Client Menu ---")
-    print_safe("[1] Post")
-    print_safe("[2] DM")
-    print_safe("[3] Show Peers")
-    print_safe("[4] View Messages by Peer")
-    print_safe("[5] Follow")
-    print_safe("[6] Unfollow")
-    print_safe("[7] Send File")
-    print_safe("[8] Accept File Offer")
-    print_safe("[9] Exit")
+    print_safe("[1] Posts") # view, create, like, unlike
+    print_safe("[2] DMs") # view, send
+    print_safe("[3] Peers") # view, follow, unfollow
+    print_safe("[4] Files")
+    print_safe("[5] Exit")
+
+def posts_menu():
+    print_safe("\n--- Posts Menu ---")
+    print_safe("[1] View Posts")
+    print_safe("[2] Create Post")
+    print_safe("[3] Like Post")
+    print_safe("[4] Unlike Post")
+    print_safe("[5] Back")
+
+def dms_menu():
+    print_safe("\n--- DMs Menu ---")
+    print_safe("[1] View DMs")
+    print_safe("[2] Send DM")
+    print_safe("[3] Back")
+
+def peers_menu():
+    print_safe("\n--- Peers Menu ---")
+    print_safe("[1] Show Peers")
+    print_safe("[2] Follow")
+    print_safe("[3] Unfollow")
+    print_safe("[4] Back")
+    
+def files_menu():
+    print_safe("\n--- Files Menu ---")
+    print_safe("[1] Send File")
+    print_safe("[2] Accept File Offer")
+    print_safe("[3] Back")
+    
+def display_posts(user_id):
+    if post_history[user_id]:
+        print_safe(f"--- Posts by {user_id} ---")
+        for post in post_history[user_id]:
+            print_safe(f"{user_id} [{post.get('TIMESTAMP')}]: {post.get('CONTENT')}")
+    else:
+        print_safe(f"No posts found by {user_id}.")
+
+def display_liked_posts():
+    if not liked_posts:
+        print_safe("No liked posts.")
+        return
+    print_safe("--- Liked Posts ---")
+    for (user_id, timestamp) in liked_posts:
+        user_posts = post_history.get(user_id, [])
+        # Find the post with that timestamp
+        for post in user_posts:
+            if post.get("TIMESTAMP") == timestamp:
+                content = post.get("CONTENT")
+                print_safe(f"{user_id} [{timestamp}]: {content}")
+                break
 
 def handle_user_input(network_handler, user_id, logger):
     """Handles commands typed by the user."""
@@ -105,118 +174,191 @@ def handle_user_input(network_handler, user_id, logger):
     while True:
         try:
             print_menu()
-            choice = input("> ").strip()
-            if not choice:
+            select = input("> ").strip()
+            if not select:
                 continue
 
-            # command = parts[0].lower()
-            match choice:
+            match select:
                 case "1":
-                    content = input("Enter your post: ")
-                    post_message = protocol.create_post_message(user_id, content)
-                    network_handler.broadcast(protocol.serialize_message(post_message))
-                    logger.log(post_message, origin="Sent")
+                    posts_menu()
+                    choice = input("> ").strip()
+                    if not choice:
+                        continue
+                    match choice:
+                        case "1": # view posts
+                            target_user_id = input("View posts from (user_id): ").strip()
+                            display_posts(target_user_id)
+                        case "2": # create post
+                            content = input("Enter your post: ")
+                            post_message = protocol.create_post_message(user_id, content)
+                            issued_tokens.add(post_message["TOKEN"])
+                            network_handler.broadcast(protocol.serialize_message(post_message))
+                            logger.log(post_message, origin="Sent")
+                        case "3": # like
+                            target_user_id = input("Like post by (user_id): ")
+                            if target_user_id not in online_peers:
+                                print_safe(f"Error: Peer '{target_user_id}' not found.")
+                                continue
+                            display_posts(target_user_id)
+                            post_timestamp = input("Enter timestamp of post: ")
+                            like_message = protocol.create_like_message(user_id, target_user_id, post_timestamp)
+                            target_ip = target_user_id.split('@')[1]
+                            network_handler.unicast(protocol.serialize_message(like_message), target_ip)
+                            logger.log(like_message, origin=f"Sent to {target_ip}")
+                            liked_posts[(target_user_id, post_timestamp)] = like_message
+
+                        case "4": # unlike
+                            if not liked_posts:
+                                print_safe("No liked posts.")
+                                continue
+                            display_liked_posts()
+                            target_user_id = input("Unlike post by (user_id): ").strip()
+                            post_timestamp = input("Enter timestamp of post:").strip()
+                            key = (target_user_id, post_timestamp)
+                            if key not in liked_posts:
+                                print_safe(f"Error: Post by {target_user_id} at '{target_user_id}' not found.")
+                                continue
+                        
+                            like_message = protocol.create_like_message(user_id, target_user_id, post_timestamp, action="UNLIKE")
+                            target_ip = target_user_id.split('@')[1]
+                            network_handler.unicast(protocol.serialize_message(like_message), target_ip)
+                            logger.log(like_message, origin=f"Sent to {target_ip}")
+                            del liked_posts[key]
+
+                        case "5": # back
+                            break
+
+                        case _:
+                            print_safe("Invalid choice")
+                            continue
 
                 case "2":
-                    target_user_id = input("Send to (user_id): ").strip()
-                    if target_user_id not in online_peers:
-                        print_safe(f"Error: Peer '{target_user_id}' not found.")
-                        continue
-                    content = input("Message: ").strip()
-                    dm_message = protocol.create_dm_message(user_id, target_user_id, content)
-                    target_ip = target_user_id.split('@')[1]
-                    network_handler.unicast(protocol.serialize_message(dm_message), target_ip)
-                    logger.log(dm_message, origin=f"Sent to {target_ip}")
-                    message_history[target_user_id].append(dm_message)
-
+                    dms_menu()
+                    choice = input("> ").strip()
+                    match choice:
+                        case "1": # view dms
+                            target_user_id = input("View messages from (user_id): ").strip()
+                            print_safe(f"--- Message History with {target_user_id} ---")
+                            if message_history[target_user_id]:
+                                for msg in message_history[target_user_id]:
+                                    direction = "To" if msg.get('FROM') == user_id else "From"
+                                    print_safe(f"[DM {direction} {target_user_id}] {msg.get('CONTENT')}")
+                            else:
+                                print_safe(f"No messages found for {target_user_id}.")
+                        case "2": # send dm
+                            target_user_id = input("Send to (user_id): ").strip()
+                            if target_user_id not in online_peers:
+                                print_safe(f"Error: Peer '{target_user_id}' not found.")
+                                continue
+                            content = input("Message: ").strip()
+                            dm_message = protocol.create_dm_message(user_id, target_user_id, content)
+                            issued_tokens.add(dm_message["TOKEN"])
+                            target_ip = target_user_id.split('@')[1]
+                            network_handler.unicast(protocol.serialize_message(dm_message), target_ip)
+                            logger.log(dm_message, origin=f"Sent to {target_ip}")
+                            message_history[target_user_id].append(dm_message)
+                        case "3": # back
+                            break
+                        case _:
+                            print_safe("Invalid choice")
+                            continue
                 case "3":
-                    print_safe("--- Online Peers ---")
-                    if online_peers:
-                        for peer_id, peer_info in online_peers.items():
-                            has_avatar = "(has avatar)" if peer_info.get('AVATAR_DATA') else ""
-                            print_safe(f"- {peer_info.get('DISPLAY_NAME', 'Unknown')} ({peer_id}) {has_avatar}")
-                    else:
-                        print_safe("No other peers detected.")
+                    peers_menu()
+                    choice = input("> ").strip()
+                    match choice:
+                        case "1":
+                            print_safe("--- Online Peers ---")
+                            if online_peers:
+                                for peer_id, peer_info in online_peers.items():
+                                    has_avatar = "(has avatar)" if peer_info.get('AVATAR_DATA') else ""
+                                    print_safe(f"- {peer_info.get('DISPLAY_NAME', 'Unknown')} ({peer_id}) {has_avatar}")
+                            else:
+                                print_safe("No other peers detected.")
 
+                        case "2":
+                            target_user_id = input("Follow user (user_id): ").strip()
+                            if target_user_id not in online_peers:
+                                print_safe(f"Error: Peer '{target_user_id}' not found.")
+                                continue
+                            follow_message = protocol.create_follow_message(user_id, target_user_id)
+                            issued_tokens.add(follow_message["TOKEN"])
+                            target_ip = target_user_id.split('@')[1]
+                            network_handler.unicast(protocol.serialize_message(follow_message), target_ip)
+                            logger.log(follow_message, origin=f"Sent to {target_ip}")
+                            following.add(target_user_id)
+
+                        case "3":
+                            target_user_id = input("Unfollow user (user_id): ").strip()
+                            if target_user_id not in following:
+                                print_safe(f"Error: You are not following '{target_user_id}'.")
+                                continue
+                            unfollow_message = protocol.create_unfollow_message(user_id, target_user_id)
+                            issued_tokens.add(unfollow_message["TOKEN"])
+                            target_ip = target_user_id.split('@')[1]
+                            network_handler.unicast(protocol.serialize_message(unfollow_message), target_ip)
+                            logger.log(unfollow_message, origin=f"Sent to {target_ip}")
+                            following.remove(target_user_id)
+
+                            if target_user_id in post_history:
+                                del post_history[target_user_id]
+                        
+                        case "4":
+                            break
+
+                        case _:
+                            print_safe("Invalid choice")
+                            continue
                 case "4":
-                    target_user_id = input("View messages from (user_id): ").strip()
-                    print_safe(f"--- Message History with {target_user_id} ---")
-                    if message_history[target_user_id]:
-                        for msg in message_history[target_user_id]:
-                            if msg.get('TYPE') == protocol.MessageType.POST:
-                                print_safe(f"[POST] {msg.get('CONTENT')}")
-                            elif msg.get('TYPE') == protocol.MessageType.DM:
-                                direction = "To" if msg.get('FROM') == user_id else "From"
-                                print_safe(f"[DM {direction} {target_user_id}] {msg.get('CONTENT')}")
-                    else:
-                        print_safe(f"No messages found for {target_user_id}.")
-
+                    files_menu()
+                    choice = input("> ").strip()
+                    match choice:
+                        case "1":
+                            target_user_id = input("Send to (user_id): ").strip()
+                            if target_user_id not in online_peers:
+                                print_safe(f"Error: Peer '{target_user_id}' not found.")
+                                continue
+                            filepath = input("Filepath: ").strip()
+                            if not os.path.exists(filepath):
+                                print_safe(f"Error: File '{filepath}' not found.")
+                                continue
+                            filename = os.path.basename(filepath)
+                            filesize = os.path.getsize(filepath)
+                            filetype = filename.split('.')[-1]
+                            fileid = secrets.token_hex(8)
+                            description = input("Description: ").strip()
+                            # Send file offer in a new thread to handle retries
+                            offer_thread = threading.Thread(target=send_file_offer_with_retry, args=(network_handler, user_id, logger, target_user_id, filepath, filename, filesize, filetype, fileid, description), daemon=True)
+                            offer_thread.start()
+                        case "2":
+                            fileid = input("Enter the File ID of the offer you want to accept: ").strip()
+                            if fileid in pending_file_offers:
+                                offer = pending_file_offers[fileid]
+                                ack_message = protocol.create_ack_message(offer['message_id'], "ACCEPTED")
+                                target_ip = offer['from'].split('@')[1]
+                                network_handler.unicast(protocol.serialize_message(ack_message), target_ip)
+                                logger.log(ack_message, origin=f"Sent to {target_ip}")
+                                incoming_files[fileid] = {
+                                    'filename': offer['filename'],
+                                    'filesize': offer['filesize'],
+                                    'received_chunks': {},
+                                    'from': offer['from']
+                                }
+                                del pending_file_offers[fileid]
+                            else:
+                                print_safe("Invalid File ID.")
+                        case "3":
+                            break
+                    
                 case "5":
-                    target_user_id = input("Follow user (user_id): ").strip()
-                    if target_user_id not in online_peers:
-                        print_safe(f"Error: Peer '{target_user_id}' not found.")
-                        continue
-                    follow_message = protocol.create_follow_message(user_id, target_user_id)
-                    target_ip = target_user_id.split('@')[1]
-                    network_handler.unicast(protocol.serialize_message(follow_message), target_ip)
-                    logger.log(follow_message, origin=f"Sent to {target_ip}")
-                    following.add(target_user_id)
-
-                case "6":
-                    target_user_id = input("Unfollow user (user_id): ").strip()
-                    if target_user_id not in following:
-                        print_safe(f"Error: You are not following '{target_user_id}'.")
-                        continue
-                    unfollow_message = protocol.create_unfollow_message(user_id, target_user_id)
-                    target_ip = target_user_id.split('@')[1]
-                    network_handler.unicast(protocol.serialize_message(unfollow_message), target_ip)
-                    logger.log(unfollow_message, origin=f"Sent to {target_ip}")
-                    following.remove(target_user_id)
-
-                case "7":
-                    target_user_id = input("Send to (user_id): ").strip()
-                    if target_user_id not in online_peers:
-                        print_safe(f"Error: Peer '{target_user_id}' not found.")
-                        continue
-                    filepath = input("Filepath: ").strip()
-                    if not os.path.exists(filepath):
-                        print_safe(f"Error: File '{filepath}' not found.")
-                        continue
-                    filename = os.path.basename(filepath)
-                    filesize = os.path.getsize(filepath)
-                    filetype = filename.split('.')[-1]
-                    fileid = secrets.token_hex(8)
-                    description = input("Description: ").strip()
-                    # Send file offer in a new thread to handle retries
-                    offer_thread = threading.Thread(target=send_file_offer_with_retry, args=(network_handler, user_id, logger, target_user_id, filepath, filename, filesize, filetype, fileid, description), daemon=True)
-                    offer_thread.start()
-
-                case "8":
-                    fileid = input("Enter the File ID of the offer you want to accept: ").strip()
-                    if fileid in pending_file_offers:
-                        offer = pending_file_offers[fileid]
-                        ack_message = protocol.create_ack_message(offer['message_id'], "ACCEPTED")
-                        target_ip = offer['from'].split('@')[1]
-                        network_handler.unicast(protocol.serialize_message(ack_message), target_ip)
-                        logger.log(ack_message, origin=f"Sent to {target_ip}")
-                        incoming_files[fileid] = {
-                            'filename': offer['filename'],
-                            'filesize': offer['filesize'],
-                            'received_chunks': {},
-                            'from': offer['from']
-                        }
-                        del pending_file_offers[fileid]
-                    else:
-                        print_safe("Invalid File ID.")
-
-                case "9":
                     print_safe("Exiting...")
+                    send_revoke_messages(network_handler, user_id, issued_tokens)
                     shutdown_event.set()
                     break
+
                 case _:
                     print_safe("Invalid choice")
                     continue
-                    
+                        
         except (EOFError, KeyboardInterrupt):
             shutdown_event.set()
             break
@@ -278,11 +420,6 @@ def main():
     broadcast_thread = threading.Thread(target=broadcast_profile, args=(network_handler, profile_message, logger), daemon=True)
     broadcast_thread.start()
 
-    # Send initial PING to discover other clients
-    ping_message = protocol.create_ping_message(user_id)
-    network_handler.broadcast(protocol.serialize_message(ping_message))
-    logger.log(ping_message, origin="Sent")
-
     # Start broadcasting ping
     discovery_thread = threading.Thread(target=broadcast_ping, args=(network_handler, user_id, logger), daemon=True)
     discovery_thread.start()
@@ -310,6 +447,19 @@ def main():
             if message.get('USER_ID') == user_id or message.get('FROM') == user_id:
                 continue
 
+            if msg_type == protocol.MessageType.REVOKE:
+                revoked_token = message.get('TOKEN')
+                if revoked_token:
+                    revoked_tokens.add(revoked_token)
+                continue
+
+            token = message.get('TOKEN')
+            sender_id = message.get('USER_ID') or message.get('FROM')
+            expected_scope = expected_scope_map.get(msg_type)
+
+            if expected_scope:
+                if not protocol.validate_token(token, expected_scope, sender_id, revoked_tokens):
+                    continue
             logger.log(message, origin=f"Received from {addr}")
 
             if msg_type == protocol.MessageType.PING:
@@ -330,7 +480,7 @@ def main():
             elif msg_type == protocol.MessageType.POST:
                 from_user_id = message.get('USER_ID')
                 if from_user_id in following:
-                    message_history[from_user_id].append(message)
+                    post_history[from_user_id].append(message)
 
             elif msg_type == protocol.MessageType.DM:
                 from_user_id = message.get('FROM')
