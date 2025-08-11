@@ -668,23 +668,51 @@ def main():
                 from_user_id = message.get('USER_ID')
                 if from_user_id in following:
                     post_history[from_user_id].append(message)
+                # Send ACK for POST message
+                message_id = message.get('MESSAGE_ID')
+                if message_id:
+                    ack_message = protocol.create_ack_message(message_id, "RECEIVED")
+                    target_ip = from_user_id.split('@')[1]
+                    network_handler.unicast(protocol.serialize_message(ack_message), target_ip)
+                    logger.log(ack_message, origin=f"Sent to {target_ip}")
 
             elif msg_type == protocol.MessageType.DM:
                 from_user_id = message.get('FROM')
                 to_user_id = message.get('TO')
                 if to_user_id == user_id:
                     message_history[from_user_id].append(message)
+                # Send ACK for DM message
+                message_id = message.get('MESSAGE_ID')
+                if message_id:
+                    ack_message = protocol.create_ack_message(message_id, "RECEIVED")
+                    target_ip = from_user_id.split('@')[1]
+                    network_handler.unicast(protocol.serialize_message(ack_message), target_ip)
+                    logger.log(ack_message, origin=f"Sent to {target_ip}")
             
             elif msg_type == protocol.MessageType.FOLLOW:
                 from_user_id = message.get('FROM')
                 followers.add(from_user_id)
                 # print_safe(f"\n> {from_user_id} has followed you.")
+                # Send ACK for FOLLOW message
+                message_id = message.get('MESSAGE_ID')
+                if message_id:
+                    ack_message = protocol.create_ack_message(message_id, "RECEIVED")
+                    target_ip = from_user_id.split('@')[1]
+                    network_handler.unicast(protocol.serialize_message(ack_message), target_ip)
+                    logger.log(ack_message, origin=f"Sent to {target_ip}")
 
             elif msg_type == protocol.MessageType.UNFOLLOW:
                 from_user_id = message.get('FROM')
                 if from_user_id in followers:
                     followers.remove(from_user_id)
                     # print_safe(f"\n> {from_user_id} has unfollowed you.")
+                # Send ACK for UNFOLLOW message
+                message_id = message.get('MESSAGE_ID')
+                if message_id:
+                    ack_message = protocol.create_ack_message(message_id, "RECEIVED")
+                    target_ip = from_user_id.split('@')[1]
+                    network_handler.unicast(protocol.serialize_message(ack_message), target_ip)
+                    logger.log(ack_message, origin=f"Sent to {target_ip}")
 
             elif msg_type == protocol.MessageType.ACK:
                 message_id = message.get('MESSAGE_ID')
