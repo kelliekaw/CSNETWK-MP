@@ -124,7 +124,9 @@ def send_ttt_invite_with_retry(user_id, target_user_id, gameid, symbol, network_
         print_safe(f"\n> No response from {target_user_id}. Giving up.")
         del sent_invites[message_id]
 
+
 def make_move(gameid, ttt_game, user_id, network_handler, logger):
+    global game_in_progress
     game_in_progress = True
     while True:
         ttt_game.print_board()
@@ -281,10 +283,11 @@ def display_pending_invites():
 
 def handle_user_input(network_handler, user_id, logger):
     """Handles commands typed by the user."""
-    
+    global game_in_progress
     while True:
         try:
             if game_in_progress:
+                time.sleep(2)
                 continue
             print_menu()
             select = input("> ").strip()
@@ -587,7 +590,8 @@ def handle_user_input(network_handler, user_id, logger):
                                 print_safe(str(e))
                                 continue
 
-                            send_ttt_invite_with_retry(user_id, target_user_id, gameid, symbol, network_handler, logger)
+                            invite_thread = threading.Thread(target=send_ttt_invite_with_retry, args=(user_id, target_user_id, gameid, symbol, network_handler, logger), daemon=True)
+                            invite_thread.start()
                         case "2":
                             if not received_invites:
                                 print_safe("No pending invites.")
@@ -818,18 +822,20 @@ def main():
 
                         active_games[gameid] = TicTacToe(player_x, player_o)
                         print_safe(f"\n> Your invite was accepted by {opponent}. Starting game...")
-
+                        
                         if player_x == user_id:
                             ttt_game = active_games.get(gameid)
                             make_move(gameid, ttt_game, user_id, network_handler, logger)
                         else:
                             print_safe(f"Waiting for {opponent} to make their move.")
+                        del sent_invites[message_id]
                     elif status == 'REJECTED':
                         invite = sent_invites[message_id]
                         opponent = invite.get('TO')
                         print_safe(f"\n> Your invite was rejected by {opponent}.")
+                        del sent_invites[message_id]
                         
-                    del sent_invites[message_id]
+                    
 
 
 
@@ -924,7 +930,7 @@ def main():
                     success, msg = ttt_game.make_move(symbol, position, turn, from_user)
                     if success:
                         ttt_game.current_symbol = "O" if ttt_game.current_symbol == "X" else "X"
-                        ttt_game.turn += 1
+                        ttt_game.turn += 2
                         make_move(gameid, ttt_game, user_id, network_handler, logger)
                     else:
                         print_safe(f"Received invalid move: {msg}")
