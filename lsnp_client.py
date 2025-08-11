@@ -930,8 +930,8 @@ def main():
                 gameid = message.get('GAMEID')
                 symbol = message.get('SYMBOL')
                 message_id = message.get('MESSAGE_ID')
-                print_safe(f"\n> {from_user_id} (as {symbol}) is inviting you to play tic-tac-toe (Game ID: {gameid})")
-                received_invites[gameid] = message
+                if gameid not in received_invites:
+                    received_invites[gameid] = message
 
             elif msg_type == protocol.MessageType.TICTACTOE_MOVE:
                 gameid = message.get('GAMEID')
