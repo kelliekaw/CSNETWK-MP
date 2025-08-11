@@ -1,3 +1,5 @@
+#Sidney Chan
+#Kellie Kaw
 # Defines the LSNP message formats and provides functions for creating and parsing messages.
 import time
 import secrets

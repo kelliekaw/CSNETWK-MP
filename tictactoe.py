@@ -1,3 +1,5 @@
+#Sidney Chan
+#Kellie Kaw
 from shared import print_safe
 
 class TicTacToe:

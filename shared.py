@@ -1,3 +1,5 @@
+#Sidney Chan
+#Kellie Kaw
 import threading
 
 print_lock = threading.Lock()

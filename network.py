@@ -1,3 +1,5 @@
+#Sidney Chan
+#Kellie Kaw
 import socket
 
 class NetworkHandler:
