@@ -191,7 +191,8 @@ def print_menu():
     print_safe("[3] Peers") # view, follow, unfollow
     print_safe("[4] Files")
     print_safe("[5] Groups")
-    print_safe("[6] Exit")
+    print_safe("[6] Tic-Tac-Toe")
+    print_safe("[7] Exit")
 
 def posts_menu():
     print_safe("\n--- Posts Menu ---")
@@ -332,7 +333,7 @@ def handle_user_input(network_handler, user_id, logger):
                             del liked_posts[key]
 
                         case "5": # back
-                            break
+                            continue
 
                         case _:
                             print_safe("Invalid choice")
@@ -364,7 +365,7 @@ def handle_user_input(network_handler, user_id, logger):
                             logger.log(dm_message, origin=f"Sent to {target_ip}")
                             message_history[target_user_id].append(dm_message)
                         case "3": # back
-                            break
+                            continue
                         case _:
                             print_safe("Invalid choice")
                             continue
@@ -409,7 +410,7 @@ def handle_user_input(network_handler, user_id, logger):
                                 del post_history[target_user_id]
                         
                         case "4":
-                            break
+                            continue
 
                         case _:
                             print_safe("Invalid choice")
@@ -453,7 +454,10 @@ def handle_user_input(network_handler, user_id, logger):
                             else:
                                 print_safe("Invalid File ID.")
                         case "3":
-                            break
+                            continue
+                        case _:
+                            print_safe("Invalid move")
+                            continue
                 
                 case "5":
                     groups_menu()
@@ -552,7 +556,7 @@ def handle_user_input(network_handler, user_id, logger):
                             continue
 
                         case "6":
-                            break
+                            continue
 
                         case _:
                             print_safe("Invalid choice.")
@@ -610,6 +614,11 @@ def handle_user_input(network_handler, user_id, logger):
                                 make_move(gameid, ttt_game, user_id, network_handler, logger)
                             else:
                                 print_safe(f"Waiting for {from_user} to make their move.")
+                        case "3":
+                            continue
+                        case _:
+                            print_safe("Invalid choice")
+                            continue
                                 
 
 
@@ -908,6 +917,8 @@ def main():
                     from_user = message.get('FROM')
                     success, msg = ttt_game.make_move(symbol, position, turn, from_user)
                     if success:
+                        ttt_game.current_symbol = "O" if ttt_game.current_symbol == "X" else "X"
+                        ttt_game.turn += 1
                         make_move(gameid, ttt_game, user_id, network_handler, logger)
                     else:
                         print_safe(f"Received invalid move: {msg}")

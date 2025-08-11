@@ -39,10 +39,7 @@ class TicTacToe:
             self.winning_symbol = symbol
         elif self.check_draw():
             self.is_draw = True
-        else:
-            # Switch turns
-            self.current_symbol = "O" if self.current_symbol == "X" else "X"
-            self.turn += 1
+            
 
         return True, "Move accepted"
 
