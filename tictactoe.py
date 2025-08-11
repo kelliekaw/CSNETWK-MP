@@ -13,15 +13,16 @@ class TicTacToe:
         self.winning_symbol = None
 
 
-    def print_board(moves):
+    def print_board(self):
         # moves is a list of 9 elements: either 'X', 'O', or None (empty)
+        moves = self.board
         display = [str(i) if moves[i] == ' ' else moves[i] for i in range(9)]
         
-        print(f" {display[0]} | {display[1]} | {display[2]} ")
-        print("---+---+---")
-        print(f" {display[3]} | {display[4]} | {display[5]} ")
-        print("---+---+---")
-        print(f" {display[6]} | {display[7]} | {display[8]} ")
+        print_safe(f" {display[0]} | {display[1]} | {display[2]} ")
+        print_safe("---+---+---")
+        print_safe(f" {display[3]} | {display[4]} | {display[5]} ")
+        print_safe("---+---+---")
+        print_safe(f" {display[6]} | {display[7]} | {display[8]} ")
 
     def make_move(self, symbol, position, turn_number, user_id):
         if turn_number != self.turn:
@@ -59,10 +60,6 @@ class TicTacToe:
 
     def check_draw(self):
         return all(s != ' ' for s in self.board) and not self.winner
-
-    def print_board(self):
-        b = self.board
-        print_safe(f"\n {b[0]} | {b[1]} | {b[2]}\n---+---+---\n {b[3]} | {b[4]} | {b[5]}\n---+---+---\n {b[6]} | {b[7]} | {b[8]}\n")
 
     def get_status(self):
         if self.winner:

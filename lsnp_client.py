@@ -125,7 +125,7 @@ def send_ttt_invite_with_retry(user_id, target_user_id, gameid, symbol, network_
 
 def make_move(gameid, ttt_game, user_id, network_handler, logger):
     while True:
-        ttt_game.print_board(ttt_game.board)
+        ttt_game.print_board()
         try:
             pos = int(input("Enter your move position (0-8): ").strip())
         except ValueError:
