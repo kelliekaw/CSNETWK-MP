@@ -382,8 +382,10 @@ def handle_user_input(network_handler, user_id, logger):
                             content = input("Enter your post: ")
                             post_message = protocol.create_post_message(user_id, content)
                             issued_tokens.add(post_message["TOKEN"])
-                            network_handler.broadcast(protocol.serialize_message(post_message))
-                            logger.log(post_message, origin="Sent")
+                            for follower in followers:
+                                target_ip = follower.split('@')[1]
+                                network_handler.unicast(protocol.serialize_message(post_message), target_ip)
+                                logger.log(post_message, origin="Sent")
                         case "3": # like
                             target_user_id = input("Like post by (user_id): ")
                             if target_user_id not in online_peers:
