@@ -834,9 +834,10 @@ def main():
                 from_user_id = message.get('USER_ID')
                 if from_user_id and from_user_id not in online_peers:
                     online_peers[from_user_id] = message
-                    target_ip = from_user_id.split('@')[1]
-                    network_handler.unicast(protocol.serialize_message(profile_message), target_ip)
-                    logger.log(profile_message)
+                
+                target_ip = from_user_id.split('@')[1]
+                network_handler.unicast(protocol.serialize_message(profile_message), target_ip)
+                logger.log(profile_message)
 
             
             elif msg_type == protocol.MessageType.PROFILE:
@@ -844,6 +845,7 @@ def main():
                 if from_user_id and from_user_id not in online_peers:
                     online_peers[from_user_id] = message
                     network_handler.broadcast(protocol.serialize_message(profile_message))
+                    logger.log(profile_message)
                 else: # Update existing peer
                     online_peers[from_user_id].update(message)
             
