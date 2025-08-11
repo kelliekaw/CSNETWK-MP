@@ -21,7 +21,7 @@ This is a Python implementation of the Local Social Networking Protocol (LSNP), 
 ### File Sharing
 *   **File Transfer:** Send and receive files between users with automatic chunking.
 *   **Offer/Accept Model:** Files must be accepted before transfer begins.
-*   **Retry Mechanism:** Automatic retry for failed transfers.
+
 
 ### Groups
 *   **Group Creation:** Create groups with multiple members.
