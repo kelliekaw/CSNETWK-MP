@@ -129,6 +129,22 @@ def make_move(gameid, ttt_game, user_id, network_handler, logger):
     global game_in_progress
     game_in_progress = True
     while True:
+        if ttt_game.winner:
+            print_safe(f"Game over! Winner: {ttt_game.winner}")
+            winning_line = ','.join(map(str, ttt_game.winning_line))
+            result_msg = protocol.create_ttt_result(user_id, opponent_id, gameid, "WIN", symbol, winning_line)
+            network_handler.unicast(protocol.serialize_message(result_msg), target_ip)
+            logger.log(result_msg)
+            game_in_progress = False
+            return
+        elif ttt_game.is_draw:
+            print_safe("Game ended in a draw.")
+            result_msg = protocol.create_ttt_result(user_id, opponent_id, gameid, "DRAW", symbol, None)
+            network_handler.unicast(protocol.serialize_message(result_msg), target_ip)
+            logger.log(result_msg)
+            game_in_progress = False
+            return
+
         ttt_game.print_board()
         try:
             pos = int(input("Enter your move position (0-8): ").strip())
@@ -151,19 +167,7 @@ def make_move(gameid, ttt_game, user_id, network_handler, logger):
         logger.log(move_msg)
         print_safe(f"Move accepted at position {pos}.")
         
-        if ttt_game.winner:
-            print_safe(f"Game over! Winner: {ttt_game.winner}")
-            winning_line = ','.join(map(str, ttt_game.winning_line))
-            result_msg = protocol.create_ttt_result(user_id, opponent_id, gameid, "WIN", symbol, winning_line)
-            network_handler.unicast(protocol.serialize_message(result_msg), target_ip)
-            game_in_progress = False
-            break
-        elif ttt_game.is_draw:
-            print_safe("Game ended in a draw.")
-            result_msg = protocol.create_ttt_result(user_id, opponent_id, gameid, "DRAW", symbol, None)
-            network_handler.unicast(protocol.serialize_message(result_msg), target_ip)
-            game_in_progress = False
-            break
+        
 
         break
         
@@ -618,6 +622,7 @@ def handle_user_input(network_handler, user_id, logger):
                                 player_o = from_user
                                 player_x = user_id
                             active_games[gameid] = TicTacToe(player_x, player_o, symbol)
+                            game_in_progress = True
 
                             if player_x == user_id:
                                 ttt_game = active_games.get(gameid)
@@ -822,6 +827,8 @@ def main():
 
                         active_games[gameid] = TicTacToe(player_x, player_o, symbol)
                         print_safe(f"\n> Your invite was accepted by {opponent}. Starting game...")
+                        global game_in_progress
+                        game_in_progress = True
                         
                         if player_x == user_id:
                             ttt_game = active_games.get(gameid)
@@ -929,7 +936,6 @@ def main():
                     from_user = message.get('FROM')
                     success, msg = ttt_game.make_move(symbol, position, turn, from_user)
                     if success:
-                        # ttt_game.current_symbol = "O" if ttt_game.current_symbol == "X" else "X"
                         ttt_game.turn += 2
                         make_move(gameid, ttt_game, user_id, network_handler, logger)
                     else:
@@ -941,6 +947,8 @@ def main():
             elif msg_type == protocol.MessageType.TICTACTOE_RESULT:
                 gameid = message.get('GAMEID')
                 ttt_game = active_games.get(gameid)
+                if ttt_game:
+                    del active_games[gameid]
 
     except KeyboardInterrupt:
         print_safe("\nShutting down client.")
