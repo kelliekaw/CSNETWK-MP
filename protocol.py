@@ -216,7 +216,7 @@ def create_group_create(from_user, group_name, members):
 
 def create_group_update(from_user, group_id, add=None, remove=None):
     msg = {
-        "TYPE": "GROUP_UPDATE",
+        "TYPE": MessageType.GROUP_UPDATE,
         "FROM": from_user,
         "GROUP_ID": group_id,
         "TIMESTAMP": int(time.time()),
@@ -228,13 +228,52 @@ def create_group_update(from_user, group_id, add=None, remove=None):
 
 def create_group_message(from_user, group_id, content):
     return {
-        "TYPE": "GROUP_MESSAGE",
+        "TYPE": MessageType.GROUP_MESSAGE,
         "FROM": from_user,
         "GROUP_ID": group_id,
         "CONTENT": content,
         "TIMESTAMP": int(time.time()),
         "TOKEN": create_token(from_user, "group")
     }
+
+def create_ttt_invite(from_user, to_user, gameid, symbol):
+    return {
+        "TYPE": MessageType.TICTACTOE_INVITE,
+        "FROM": from_user,
+        "TO": to_user,
+        "GAMEID": gameid,
+        "MESSAGE_ID": secrets.token_hex(8),
+        "SYMBOL": symbol,
+        "TIMESTAMP": int(time.time()),
+        "TOKEN": create_token(from_user, "game")
+    }
+
+def create_ttt_move(from_user, to_user, gameid, position, symbol, turn):
+    return {
+        "TYPE": MessageType.TICTACTOE_MOVE,
+        "FROM": from_user,
+        "TO": to_user,
+        "GAMEID": gameid,
+        "MESSAGE_ID": secrets.token_hex(8),
+        "POSITION": position,
+        "SYMBOL": symbol,
+        "TURN": turn,
+        "TOKEN": create_token(from_user, "game")
+    }
+
+def create_ttt_result(from_user, to_user, gameid, result, symbol, winning_line):
+    return {
+        "TYPE": MessageType.TICTACTOE_RESULT,
+        "FROM": from_user,
+        "TO": to_user,
+        "GAMEID": gameid,
+        "MESSAGE_ID": secrets.token_hex(8),
+        "RESULT": result,
+        "SYMBOL": symbol,
+        "WINNING_LINE": winning_line,
+        "TIMESTAMP": int(time.time())
+    }
+
 
 def serialize_message(message_dict):
     """Converts a message dictionary into a string for transmission."""
