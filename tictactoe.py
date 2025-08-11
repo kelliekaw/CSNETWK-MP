@@ -25,10 +25,10 @@ class TicTacToe:
         print_safe(f" {display[6]} | {display[7]} | {display[8]} ")
 
     def make_move(self, symbol, position, turn_number, user_id):
-        if turn_number != self.turn:
-            return False, "Invalid turn number"
-        if symbol != self.current_symbol:
-            return False, "Not this player's turn"
+        # if turn_number != self.turn:
+        #     return False, "Invalid turn number"
+        # if symbol != self.current_symbol:
+        #     return False, "Not this player's turn"
         if position < 0 or position > 8 or self.board[position] != ' ':
             return False, "Invalid position"
 
