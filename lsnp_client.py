@@ -811,6 +811,36 @@ def main():
                 else:
                     print_safe("Received GROUP_UPDATE message with no GROUP_ID")
 
+            elif msg_type == protocol.MessageType.TICTACTOE_INVITE:
+                from_user_id = message.get('FROM')
+                # Send ACK for TICTACTOE_INVITE message
+                message_id = message.get('MESSAGE_ID')
+                if message_id:
+                    ack_message = protocol.create_ack_message(message_id, "RECEIVED")
+                    target_ip = from_user_id.split('@')[1]
+                    network_handler.unicast(protocol.serialize_message(ack_message), target_ip)
+                    logger.log(ack_message, origin=f"Sent to {target_ip}")
+
+            elif msg_type == protocol.MessageType.TICTACTOE_MOVE:
+                from_user_id = message.get('FROM')
+                # Send ACK for TICTACTOE_MOVE message
+                message_id = message.get('MESSAGE_ID')
+                if message_id:
+                    ack_message = protocol.create_ack_message(message_id, "RECEIVED")
+                    target_ip = from_user_id.split('@')[1]
+                    network_handler.unicast(protocol.serialize_message(ack_message), target_ip)
+                    logger.log(ack_message, origin=f"Sent to {target_ip}")
+
+            elif msg_type == protocol.MessageType.TICTACTOE_RESULT:
+                from_user_id = message.get('FROM')
+                # Send ACK for TICTACTOE_RESULT message
+                message_id = message.get('MESSAGE_ID')
+                if message_id:
+                    ack_message = protocol.create_ack_message(message_id, "RECEIVED")
+                    target_ip = from_user_id.split('@')[1]
+                    network_handler.unicast(protocol.serialize_message(ack_message), target_ip)
+                    logger.log(ack_message, origin=f"Sent to {target_ip}")
+
 
 
     except KeyboardInterrupt:
