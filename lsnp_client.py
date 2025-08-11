@@ -138,9 +138,10 @@ def dms_menu():
 def peers_menu():
     print_safe("\n--- Peers Menu ---")
     print_safe("[1] Show Peers")
-    print_safe("[2] Follow")
-    print_safe("[3] Unfollow")
-    print_safe("[4] Back")
+    print_safe("[2] View Profile")
+    print_safe("[3] Follow")
+    print_safe("[4] Unfollow")
+    print_safe("[5] Back")
     
 def files_menu():
     print_safe("\n--- Files Menu ---")
@@ -191,6 +192,68 @@ def display_groups():
         print_safe(f"Name: {name}")
         print_safe(f"Members: {members}")
         print_safe("-" * 14)
+
+def view_profile(user_id):
+    """Display a user's profile and download their avatar if available."""
+    if user_id not in online_peers:
+        print_safe(f"User '{user_id}' not found in online peers.")
+        return
+    
+    peer_info = online_peers[user_id]
+    display_name = peer_info.get('DISPLAY_NAME', 'N/A')
+    status = peer_info.get('STATUS', 'N/A')
+    
+    print_safe(f"\n--- Profile for {user_id} ---")
+    print_safe(f"Display Name: {display_name}")
+    print_safe(f"Status: {status}")
+    
+    # Check if user has an avatar
+    if 'AVATAR_DATA' in peer_info and peer_info['AVATAR_DATA']:
+        print_safe("User has an avatar.")
+        download_avatar = input("Download avatar? (y/n): ").strip().lower()
+        if download_avatar == 'y':
+            download_user_avatar(user_id)
+    else:
+        print_safe("User has no avatar.")
+
+def download_user_avatar(user_id):
+    """Download and save a user's avatar."""
+    if user_id not in online_peers:
+        print_safe(f"User '{user_id}' not found.")
+        return
+    
+    peer_info = online_peers[user_id]
+    
+    # Check if user has avatar data
+    if 'AVATAR_DATA' not in peer_info or not peer_info['AVATAR_DATA']:
+        print_safe(f"User '{user_id}' has no avatar to download.")
+        return
+    
+    avatar_data = peer_info['AVATAR_DATA']
+    avatar_type = peer_info.get('AVATAR_TYPE', 'image/png')
+    
+    # Determine file extension based on MIME type
+    if 'jpeg' in avatar_type or 'jpg' in avatar_type:
+        ext = '.jpg'
+    elif 'png' in avatar_type:
+        ext = '.png'
+    elif 'gif' in avatar_type:
+        ext = '.gif'
+    else:
+        ext = '.png'  # Default fallback
+    
+    # Create filename
+    filename = f"avatar_{user_id.split('@')[0]}{ext}"
+    
+    try:
+        # Decode base64 data and save to file
+        import base64
+        image_data = base64.b64decode(avatar_data)
+        with open(filename, 'wb') as f:
+            f.write(image_data)
+        print_safe(f"Avatar saved as '{filename}'")
+    except Exception as e:
+        print_safe(f"Error saving avatar: {e}")
 
 def handle_user_input(network_handler, user_id, logger):
     """Handles commands typed by the user."""
@@ -300,6 +363,10 @@ def handle_user_input(network_handler, user_id, logger):
                                 print_safe("No other peers detected.")
 
                         case "2":
+                            target_user_id = input("View profile of user (user_id): ").strip()
+                            view_profile(target_user_id)
+
+                        case "3":
                             target_user_id = input("Follow user (user_id): ").strip()
                             if target_user_id not in online_peers:
                                 print_safe(f"Error: Peer '{target_user_id}' not found.")
@@ -311,7 +378,7 @@ def handle_user_input(network_handler, user_id, logger):
                             logger.log(follow_message, origin=f"Sent to {target_ip}")
                             following.add(target_user_id)
 
-                        case "3":
+                        case "4":
                             target_user_id = input("Unfollow user (user_id): ").strip()
                             if target_user_id not in following:
                                 print_safe(f"Error: You are not following '{target_user_id}'.")
@@ -326,7 +393,7 @@ def handle_user_input(network_handler, user_id, logger):
                             if target_user_id in post_history:
                                 del post_history[target_user_id]
                         
-                        case "4":
+                        case "5":
                             break
 
                         case _:
