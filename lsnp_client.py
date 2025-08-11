@@ -33,6 +33,7 @@ sent_invites = {}
 received_invites = {}
 active_game_ids = set()
 active_games = {}
+game_in_progress = False
 
 
 expected_scope_map = {
@@ -124,6 +125,7 @@ def send_ttt_invite_with_retry(user_id, target_user_id, gameid, symbol, network_
         del sent_invites[message_id]
 
 def make_move(gameid, ttt_game, user_id, network_handler, logger):
+    game_in_progress = True
     while True:
         ttt_game.print_board()
         try:
@@ -152,11 +154,13 @@ def make_move(gameid, ttt_game, user_id, network_handler, logger):
             winning_line = ','.join(map(str, ttt_game.winning_line))
             result_msg = protocol.create_ttt_result(user_id, opponent_id, gameid, "WIN", symbol, winning_line)
             network_handler.unicast(protocol.serialize_message(result_msg), target_ip)
+            game_in_progress = False
             break
         elif ttt_game.is_draw:
             print_safe("Game ended in a draw.")
             result_msg = protocol.create_ttt_result(user_id, opponent_id, gameid, "DRAW", symbol, None)
             network_handler.unicast(protocol.serialize_message(result_msg), target_ip)
+            game_in_progress = False
             break
 
         break
@@ -277,9 +281,11 @@ def display_pending_invites():
 
 def handle_user_input(network_handler, user_id, logger):
     """Handles commands typed by the user."""
-    # print_safe("\nType 'post <message>', 'dm <user_id> <message>', 'peers', 'view <user_id>', or 'exit'.")
+    
     while True:
         try:
+            if game_in_progress:
+                continue
             print_menu()
             select = input("> ").strip()
             if not select:
