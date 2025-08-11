@@ -381,6 +381,7 @@ def handle_user_input(network_handler, user_id, logger):
                         case "2": # create post
                             content = input("Enter your post: ")
                             post_message = protocol.create_post_message(user_id, content)
+                            post_history[user_id] = post_message
                             issued_tokens.add(post_message["TOKEN"])
                             for follower in followers:
                                 target_ip = follower.split('@')[1]
