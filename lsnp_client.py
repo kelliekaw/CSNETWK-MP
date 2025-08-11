@@ -124,25 +124,35 @@ def send_ttt_invite_with_retry(user_id, target_user_id, gameid, symbol, network_
         print_safe(f"\n> No response from {target_user_id}. Giving up.")
         del sent_invites[message_id]
 
+def end_condition(ttt_game, user_id, opponent_id, gameid, symbol, target_ip, network_handler, logger):
+    global game_in_progress
+    if ttt_game.winner:
+        print_safe(f"Game over! Winner: {ttt_game.winner}")
+        winning_line = ','.join(map(str, ttt_game.winning_line))
+        result_msg = protocol.create_ttt_result(user_id, opponent_id, gameid, "WIN", symbol, winning_line)
+        network_handler.unicast(protocol.serialize_message(result_msg), target_ip)
+        logger.log(result_msg)
+        game_in_progress = False
+        return True
+    elif ttt_game.is_draw:
+        print_safe("Game ended in a draw.")
+        result_msg = protocol.create_ttt_result(user_id, opponent_id, gameid, "DRAW", symbol, None)
+        network_handler.unicast(protocol.serialize_message(result_msg), target_ip)
+        logger.log(result_msg)
+        game_in_progress = False
+        return True
+    return False
 
 def make_move(gameid, ttt_game, user_id, network_handler, logger):
     global game_in_progress
     game_in_progress = True
     while True:
-        if ttt_game.winner:
-            print_safe(f"Game over! Winner: {ttt_game.winner}")
-            winning_line = ','.join(map(str, ttt_game.winning_line))
-            result_msg = protocol.create_ttt_result(user_id, opponent_id, gameid, "WIN", symbol, winning_line)
-            network_handler.unicast(protocol.serialize_message(result_msg), target_ip)
-            logger.log(result_msg)
-            game_in_progress = False
-            return
-        elif ttt_game.is_draw:
-            print_safe("Game ended in a draw.")
-            result_msg = protocol.create_ttt_result(user_id, opponent_id, gameid, "DRAW", symbol, None)
-            network_handler.unicast(protocol.serialize_message(result_msg), target_ip)
-            logger.log(result_msg)
-            game_in_progress = False
+        symbol = ttt_game.my_symbol
+        turn_number = ttt_game.turn
+        opponent_id = ttt_game.player_o if symbol == "X" else ttt_game.player_x
+        target_ip = opponent_id.split('@')[1]
+
+        if end_condition(ttt_game, user_id, opponent_id, gameid, symbol, target_ip, network_handler, logger):
             return
 
         ttt_game.print_board()
@@ -152,23 +162,20 @@ def make_move(gameid, ttt_game, user_id, network_handler, logger):
             print_safe("Invalid input. Please enter a number from 0 to 8.")
             continue
 
-        symbol = ttt_game.my_symbol
-        turn_number = ttt_game.turn
-
+        
         success, msg = ttt_game.make_move(symbol, pos, turn_number, user_id)
         if not success:
             print_safe(f"Move rejected: {msg}")
             continue
 
-        opponent_id = ttt_game.player_o if symbol == "X" else ttt_game.player_x
         move_msg = protocol.create_ttt_move(user_id, opponent_id, gameid, pos, symbol, turn_number)
-        target_ip = opponent_id.split('@')[1]
         network_handler.unicast(protocol.serialize_message(move_msg), target_ip)
         logger.log(move_msg)
         print_safe(f"Move accepted at position {pos}.")
-        
-        
 
+        if end_condition(ttt_game, user_id, opponent_id, gameid, symbol, target_ip, network_handler, logger):
+            return
+        
         break
         
 
