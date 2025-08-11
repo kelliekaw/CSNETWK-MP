@@ -189,6 +189,7 @@ def create_file_received_message(from_user_id, to_user_id, fileid, status):
         "FILEID": fileid,
         "STATUS": status,
         "TIMESTAMP": int(time.time())
+    }
 
 def create_like_message(from_user_id, to_user_id, post_timestamp, action="LIKE"):
     return {
