@@ -1,14 +1,14 @@
 from shared import print_safe
 
 class TicTacToe:
-    def __init__(self, player_x, player_o):
+    def __init__(self, player_x, player_o, my_symbol):
         self.player_x = player_x  # user_id with X
         self.player_o = player_o  # user_id with O
         self.board = [' '] * 9  # 3x3 board flattened
         self.turn = 1  # X always starts
         self.winner = None
         self.is_draw = False
-        self.current_symbol = 'X'
+        self.my_symbol = my_symbol
         self.winning_line = None
         self.winning_symbol = None
 

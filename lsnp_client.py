@@ -136,7 +136,7 @@ def make_move(gameid, ttt_game, user_id, network_handler, logger):
             print_safe("Invalid input. Please enter a number from 0 to 8.")
             continue
 
-        symbol = ttt_game.current_symbol
+        symbol = ttt_game.my_symbol
         turn_number = ttt_game.turn
 
         success, msg = ttt_game.make_move(symbol, pos, turn_number, user_id)
@@ -617,7 +617,7 @@ def handle_user_input(network_handler, user_id, logger):
                             else:
                                 player_o = from_user
                                 player_x = user_id
-                            active_games[gameid] = TicTacToe(player_x, player_o)
+                            active_games[gameid] = TicTacToe(player_x, player_o, symbol)
 
                             if player_x == user_id:
                                 ttt_game = active_games.get(gameid)
@@ -820,7 +820,7 @@ def main():
                             player_x = opponent
                             player_o = user_id
 
-                        active_games[gameid] = TicTacToe(player_x, player_o)
+                        active_games[gameid] = TicTacToe(player_x, player_o, symbol)
                         print_safe(f"\n> Your invite was accepted by {opponent}. Starting game...")
                         
                         if player_x == user_id:
@@ -929,7 +929,7 @@ def main():
                     from_user = message.get('FROM')
                     success, msg = ttt_game.make_move(symbol, position, turn, from_user)
                     if success:
-                        ttt_game.current_symbol = "O" if ttt_game.current_symbol == "X" else "X"
+                        # ttt_game.current_symbol = "O" if ttt_game.current_symbol == "X" else "X"
                         ttt_game.turn += 2
                         make_move(gameid, ttt_game, user_id, network_handler, logger)
                     else:
