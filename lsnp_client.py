@@ -132,7 +132,7 @@ def end_condition(ttt_game, user_id, opponent_id, gameid, symbol, target_ip, net
         result_msg = protocol.create_ttt_result(user_id, opponent_id, gameid, "WIN", symbol, winning_line)
         network_handler.unicast(protocol.serialize_message(result_msg), target_ip)
         logger.log(result_msg)
-        ttt_game.print_board
+        ttt_game.print_board()
         game_in_progress = False
         return True
     elif ttt_game.is_draw:
@@ -140,7 +140,7 @@ def end_condition(ttt_game, user_id, opponent_id, gameid, symbol, target_ip, net
         result_msg = protocol.create_ttt_result(user_id, opponent_id, gameid, "DRAW", symbol, None)
         network_handler.unicast(protocol.serialize_message(result_msg), target_ip)
         logger.log(result_msg)
-        ttt_game.print_board
+        ttt_game.print_board()
         game_in_progress = False
         return True
     return False
