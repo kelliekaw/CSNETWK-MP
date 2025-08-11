@@ -116,10 +116,9 @@ This implementation follows the LSNP specification with support for all message 
 
 ## AI Disclosure
 
-This project was developed with the assistance of AI tools, primarily Qwen and Gemini. The AI was used to help with:
+This project was developed with the assistance of AI tools, primarily Qwen and Gemini for generating, debugging and explaining code. The AI was also used to help with:
 - Code structure and organization
 - Implementation of complex features
-- Debugging and error handling
 - Documentation and comments
 
 All AI code was carefully reviewed, tested, and validated to ensure it meets the project requirements and functions correctly.
