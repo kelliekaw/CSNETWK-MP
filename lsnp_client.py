@@ -915,6 +915,8 @@ def main():
                     symbol = message.get('SYMBOL')
                     turn = message.get('TURN')
                     from_user = message.get('FROM')
+                    if ttt_game.turn != turn:
+                        ttt_game.turn = turn
                     success, msg = ttt_game.make_move(symbol, position, turn, from_user)
                     if success:
                         ttt_game.current_symbol = "O" if ttt_game.current_symbol == "X" else "X"
