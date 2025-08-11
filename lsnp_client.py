@@ -911,7 +911,7 @@ def main():
                 gameid = message.get('GAMEID')
                 ttt_game = active_games.get(gameid)
                 if ttt_game:
-                    position = message.get('POSITION')
+                    position = int(message.get('POSITION'))
                     symbol = message.get('SYMBOL')
                     turn = message.get('TURN')
                     from_user = message.get('FROM')
