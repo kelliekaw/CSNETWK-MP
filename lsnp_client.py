@@ -1,3 +1,5 @@
+#Sidney Chan
+#Kellie Kaw
 import secrets
 import protocol
 from network import NetworkHandler

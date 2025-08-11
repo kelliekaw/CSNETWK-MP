@@ -1,3 +1,6 @@
+Sidney Chan, 
+Kellie Kaw
+
 # LSNP Client - Full Implementation
 
 This is a Python implementation of the Local Social Networking Protocol (LSNP), a decentralized communication framework that facilitates social networking functionality within local area networks (LANs) without relying on centralized servers or internet connectivity.
